@@ -1,22 +1,24 @@
 import kotlin.math.pow
 
+typealias CardId = Int
+
 fun main() {
     val day = "Day04"
 
     data class Card(
-        val id: Int,
+        val id: CardId,
         val winningNumbers: Set<Int>,
         val myNumbers: Set<Int>
     ) {
-        fun wonCardCount() = winningNumbers.intersect(myNumbers).size
+        fun wonCardCount() = (winningNumbers intersect myNumbers).size
 
         fun points() = wonCardCount()
-            .takeIf { it > 0 }
-            ?.let { 2.0.pow(it - 1).toInt() }
-            ?: 0
+            .let { count -> if (count == 0) 0 else 2.0.pow(count - 1).toInt() }
+
+        fun wonCardIds() = (id + 1)..(id + wonCardCount())
     }
 
-    fun String.parseNumbers() = trim().split(' ')
+    fun String.parseNumbers() = split(' ')
         .filter { it.isNotBlank() }
         .map { it.trim().toInt() }
         .toSet()
@@ -37,16 +39,19 @@ fun main() {
     }
 
     fun part2(input: List<String>): Int {
-        val cardMap = input
-            .map { parseCard(it) }
-            .associateBy { it.id }
+        val cards = input.map { parseCard(it) }
 
-        fun Card.withWonCards(): List<Card> = listOf(this) + (id + 1..id + wonCardCount())
-            .mapNotNull { cardMap[it] }
-            .flatMap { it.withWonCards() }
+        val cardCounts = buildMap<CardId, Int> {
+            cards.forEach { card ->
+                this[card.id] = 1
+            }
+            cards.forEach { card ->
+                val cardCount = this[card.id]!!
+                card.wonCardIds().forEach { id -> merge(id, cardCount, Int::plus) }
+            }
+        }
 
-        val myCards = cardMap.values.flatMap { it.withWonCards() }
-        return myCards.size
+        return cardCounts.values.sum()
     }
 
     // TESTS
