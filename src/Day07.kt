@@ -1,90 +1,38 @@
-enum class CardType {
-    FIVE {
-        override fun detect1(cards: String) = cards.toCharMap().values.any { it == 5 }
+enum class CardType(private val n1: Int, private val n2: Int) {
+    FIVE(5, 0),
+    FOUR(4, 1),
+    FULL(3, 2),
+    THREE(3, 1),
+    TWO_PAIR(2, 2),
+    ONE_PAIR(2, 1),
+    HIGH_CARD(1, 1);
 
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            map.jokerCount() == 5 || map.withoutJoker()[0].value == 5 - map.jokerCount()
-        }
-    },
-    FOUR {
-        override fun detect1(cards: String) = cards.toCharMap().values.any { it == 4 }
+    fun isType(cardMap: Map<Char, Int>) = cardMap.values.toList().matches()
 
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            map.withoutJoker()[0].value == 4 - map.jokerCount()
-        }
-    },
-    FULL {
-        override fun detect1(cards: String) = cards.toCharMap().let { map ->
-            map.values.any { it == 3 } && map.values.any { it == 2 }
-        }
-
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            val withoutJoker = map.withoutJoker()
-            when (map.jokerCount()) {
-                1 -> withoutJoker[0].value == 3 && withoutJoker[1].value == 1
-                        || withoutJoker[0].value == 2 && withoutJoker[1].value == 2
-
-                0 -> withoutJoker[0].value == 3 && withoutJoker[1].value == 2
-                else -> false
-            }
-        }
-    },
-    THREE {
-        override fun detect1(cards: String) = cards.toCharMap().values.any { it == 3 }
-
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            map.withoutJoker()[0].value == 3 - map.jokerCount()
-        }
-    },
-    TWO_PAIR {
-        override fun detect1(cards: String) = cards.toCharMap().values.count { it == 2 } == 2
-
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            val withoutJoker = map.withoutJoker()
-            when (map.jokerCount()) {
-                1 -> withoutJoker[0].value == 2 && withoutJoker[1].value == 1
-                0 -> withoutJoker[0].value == 2 && withoutJoker[1].value == 2
-                else -> false
-            }
-        }
-    },
-    ONE_PAIR {
-        override fun detect1(cards: String) = cards.toCharMap().values.any { it == 2 }
-
-        override fun detect2(cards: String) = cards.toCharMap().let { map ->
-            map.withoutJoker()[0].value == 2 - map.jokerCount()
-        }
-    },
-    HIGH_CARD {
-        override fun detect1(cards: String) = cards.toCharMap().values.all { it == 1 }
-
-        override fun detect2(cards: String) = detect1(cards)
-    };
-
-    abstract fun detect1(cards: String): Boolean
-
-    abstract fun detect2(cards: String): Boolean
-
-    companion object {
-        fun String.toCharMap() = toCharArray()
-            .groupBy { it }
-            .map { (c, list) -> c to list.size }
-            .sortedByDescending { (_, size) -> size }
-            .toMap()
-
-        fun Map<Char, Int>.withoutJoker() = this.entries.filter { (c, _) -> c != 'J' }
-
-        fun Map<Char, Int>.jokerCount() = getOrDefault('J', 0)
+    fun isTypeWithJokers(cardMap: Map<Char, Int>) = cardMap.getOrDefault('J', 0).let { jokerCount ->
+        jokerCount >= 4 || cardMap.filterKeys { it != 'J' }.values.toList().matches(jokerCount)
     }
+
+    private fun List<Int>.matches(jokerCount: Int = 0) = this[0] + jokerCount == n1 && (n2 == 0 || this[1] == n2)
 }
 
 fun main() {
 
     val day = "Day07"
 
-    fun detectType1(cards: String) = CardType.entries.first { it.detect1(cards) }
+    fun String.toSortedCharMap() = toCharArray()
+        .groupBy { it }
+        .map { (card, cards) -> card to cards.size }
+        .sortedByDescending { (_, size) -> size }
+        .toMap()
 
-    fun detectType2(cards: String) = CardType.entries.first { it.detect2(cards) }
+    fun detectType(cards: String) = cards.toSortedCharMap().let { cardMap ->
+        CardType.entries.first { it.isType(cardMap) }
+    }
+
+    fun detectTypeWithJokers(cards: String) = cards.toSortedCharMap().let { cardMap ->
+        CardType.entries.first { it.isTypeWithJokers(cardMap) }
+    }
 
     data class Hand(
         val cards: String,
@@ -102,24 +50,22 @@ fun main() {
         .thenBy { allCards.indexOf(it.cards[4]) }
         .reversed()
 
+    fun List<Hand>.totalResult() = mapIndexed { index, hand -> hand.result(rank = index + 1) }.sum()
+
     fun part1(input: List<String>): Long {
-        val handComparator = handComparator(listOf('A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'))
         return input
             .map { it.split(" ") }
-            .map { (cards, bid) -> Hand(cards, detectType1(cards), bid.toLong()) }
-            .sortedWith(handComparator)
-            .mapIndexed { index, hand -> hand.result(index + 1) }
-            .sum()
+            .map { (cards, bid) -> Hand(cards, detectType(cards), bid.toLong()) }
+            .sortedWith(handComparator(listOf('A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2')))
+            .totalResult()
     }
 
     fun part2(input: List<String>): Long {
-        val handComparator = handComparator(listOf('A', 'K', 'Q', 'T', '9', '8', '7', '6', '5', '4', '3', '2', 'J'))
         return input
             .map { it.split(" ") }
-            .map { (cards, bid) -> Hand(cards, detectType2(cards), bid.toLong()) }
-            .sortedWith(handComparator)
-            .mapIndexed { index, hand -> hand.result(index + 1) }
-            .sum()
+            .map { (cards, bid) -> Hand(cards, detectTypeWithJokers(cards), bid.toLong()) }
+            .sortedWith(handComparator(listOf('A', 'K', 'Q', 'T', '9', '8', '7', '6', '5', '4', '3', '2', 'J')))
+            .totalResult()
     }
 
     // TESTS
