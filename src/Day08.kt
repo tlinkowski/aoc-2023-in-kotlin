@@ -28,11 +28,13 @@ fun main() {
 
     fun DesertMap.nextBranch(branch: Branch, turn: Turn) = nodeToBranchMap[branch.nextNode(turn)]!!
 
-    fun DesertMap.countSteps(startBranch: Branch, endNodeCondition: (String) -> Boolean): Int =
-        generateSequence { turns }.flatten()
-            .runningFold(startBranch, this::nextBranch)
+    fun DesertMap.countLoops(startBranch: Branch, endNodeCondition: (String) -> Boolean): Int =
+        generateSequence(startBranch) { branch -> turns.fold(branch, this::nextBranch) }
             .takeWhile { branch -> !endNodeCondition(branch.node) }
             .count()
+
+    fun DesertMap.countSteps(startBranch: Branch, endNodeCondition: (String) -> Boolean): Int =
+        turns.size * countLoops(startBranch, endNodeCondition)
 
     fun DesertMap.branch(node: String) = nodeToBranchMap[node]!!
 
