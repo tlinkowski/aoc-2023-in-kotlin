@@ -2,6 +2,7 @@ import java.math.BigInteger
 import java.security.MessageDigest
 import kotlin.io.path.Path
 import kotlin.io.path.readLines
+import kotlin.math.min
 
 /**
  * Reads lines from the given input txt file.
@@ -29,3 +30,7 @@ fun LongRange.offsetBy(offset: Long) = LongRange(
 
 fun LongRange.contains(other: LongRange) = start <= other.start && other.endInclusive <= endInclusive
 
+fun gcd(a: Long, b: Long) = (1..min(a, b)).reversed()
+    .first { a % it == 0L && b % it == 0L }
+
+fun lcm(a: Long, b: Long) = a / gcd(a, b) * b
