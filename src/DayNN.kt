@@ -1,6 +1,15 @@
 fun main() {
     val day = "DayNN"
 
+    // MODEL
+
+
+    // PARSE
+
+
+    // SOLVE
+
+
     fun part1(input: List<String>): Long {
         return 0
     }
