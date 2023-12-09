@@ -23,11 +23,11 @@ fun main() {
     fun NumberSeq.prepend(prev: Long): NumberSeq = listOf(first() - prev) + this
 
     fun ResolvedNumberSeq.extendFromRight(): ResolvedNumberSeq = reversed()
-        .runningFold(last()) { prevSeq, curSeq -> curSeq.append(prevSeq.last()) }
+        .runningReduce { prevSeq, curSeq -> curSeq.append(prevSeq.last()) }
         .reversed()
 
     fun ResolvedNumberSeq.extendFromLeft(): ResolvedNumberSeq = reversed()
-        .runningFold(last()) { prevSeq, curSeq -> curSeq.prepend(prevSeq.first()) }
+        .runningReduce { prevSeq, curSeq -> curSeq.prepend(prevSeq.first()) }
         .reversed()
 
     fun ResolvedNumberSeq.resultFromRight(): Long = first().last()
