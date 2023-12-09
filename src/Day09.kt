@@ -1,69 +1,64 @@
+// MODEL
+typealias NumberSeq = List<Long>
+
+typealias ResolvedNumberSeq = List<NumberSeq>
+
 fun main() {
     val day = "Day09"
 
-    // MODEL
-    data class NumberSeq(val numbers: List<Long>)
-
-    data class ResolvedNumberSeq(val seqs: List<NumberSeq>)
-
     // PARSE
-    fun String.parseNumberSeq() = NumberSeq(toLongs())
+    fun String.parseNumberSeq(): NumberSeq = toLongs()
 
     // SOLVE
-    fun NumberSeq.shouldDoNext() = !numbers.all { it == 0L }
+    fun NumberSeq.shouldDoNext() = any { it != 0L }
 
-    fun NumberSeq.next() = NumberSeq(
-        numbers.windowed(2) { (a, b) -> b - a }
-    )
+    fun NumberSeq.next(): NumberSeq = windowed(2) { (a, b) -> b - a }
 
-    fun NumberSeq.resolve() = ResolvedNumberSeq(
-        generateSequence(this) { if (it.shouldDoNext()) it.next() else null }.toList()
-    )
+    fun NumberSeq.resolve(): ResolvedNumberSeq = generateSequence(this) {
+        if (it.shouldDoNext()) it.next() else null
+    }.toList()
 
-    fun NumberSeq.prepend(prev: Long) = NumberSeq(listOf(numbers.first() - prev) + numbers)
+    fun NumberSeq.append(prev: Long): NumberSeq = this + (last() + prev)
 
-    fun ResolvedNumberSeq.extend(): ResolvedNumberSeq {
-        val newSeqs = ArrayList<NumberSeq>(seqs)
-        var last = 0L
-        for (i in seqs.indices.reversed()) {
-            newSeqs[i] = newSeqs[i].prepend(last)
-            last = newSeqs[i].numbers.first()
-        }
-//        seqs.reversed().forEach {
-//            newSeqs.add(it.append(last))
-//            last = it.numbers.last()
-//        }
-        return ResolvedNumberSeq(newSeqs)//.reversed())
-    }
+    fun NumberSeq.prepend(prev: Long): NumberSeq = listOf(first() - prev) + this
 
-    fun ResolvedNumberSeq.extend2() = ResolvedNumberSeq(
-        seqs.reversed()
-            .drop(1)
-            .runningFold(seqs.first().prepend(0L)) { a, b -> a.prepend(b.numbers.last()) }
-            .reversed()
-    )
+    fun ResolvedNumberSeq.extendFromRight(): ResolvedNumberSeq = reversed()
+        .runningFold(last()) { prevSeq, curSeq -> curSeq.append(prevSeq.last()) }
+        .reversed()
 
-    fun ResolvedNumberSeq.result() = seqs.first().numbers.first()
+    fun ResolvedNumberSeq.extendFromLeft(): ResolvedNumberSeq = reversed()
+        .runningFold(last()) { prevSeq, curSeq -> curSeq.prepend(prevSeq.first()) }
+        .reversed()
 
-    fun part2(input: List<String>): Long {
-        val c = input
+    fun ResolvedNumberSeq.resultFromRight(): Long = first().last()
+
+    fun ResolvedNumberSeq.resultFromLeft(): Long = first().first()
+
+    fun part1(input: List<String>): Long {
+        return input
             .map { it.parseNumberSeq() }
             .map { it.resolve() }
-            .map { it.extend() }
-        println(c)
-        return c
-            .sumOf { it.result() }
+            .map { it.extendFromRight() }
+            .sumOf { it.resultFromRight() }
+    }
+
+    fun part2(input: List<String>): Long {
+        return input
+            .map { it.parseNumberSeq() }
+            .map { it.resolve() }
+            .map { it.extendFromLeft() }
+            .sumOf { it.resultFromLeft() }
     }
 
     // TESTS
-//    val part1 = part1(readInput("$day/test"))
-//    check(part1 == 114L) { "Part 1: actual=$part1" }
+    val part1 = part1(readInput("$day/test"))
+    check(part1 == 114L) { "Part 1: actual=$part1" }
 
     val part2 = part2(readInput("$day/test"))
     check(part2 == 2L) { "Part 2: actual=$part2" }
 
     // RESULTS
     val input = readInput("$day/input")
-//    println("Part 1: " + part1(input))
+    println("Part 1: " + part1(input))
     println("Part 2: " + part2(input))
 }
