@@ -34,3 +34,13 @@ fun gcd(a: Long, b: Long) = (1..min(a, b)).reversed()
     .first { a % it == 0L && b % it == 0L }
 
 fun lcm(a: Long, b: Long) = a / gcd(a, b) * b
+
+fun <T> Sequence<T>.takeWhileInclusive(predicate: (T) -> Boolean) = sequence {
+    with(iterator()) {
+        while (hasNext()) {
+            val next = next()
+            yield(next)
+            if (!predicate(next)) break
+        }
+    }
+}

@@ -61,27 +61,21 @@ fun main() {
 
     fun PipePointMove.connectsBack() = sourceDir.opposite() in target.pipe.dirs
 
-    fun PipeMap.firstNext(start: PipePoint): PipePointMove = Dir.entries
+    fun PipeMap.firstNextMove(start: PipePoint): PipePointMove = Dir.entries
         .mapNotNull { dir -> tryMove(start, dir) }
         .first { move -> move.connectsBack() }
 
     fun PipePointMove.nextDir() = (target.pipe.dirs - sourceDir.opposite()).single()
 
-    fun PipeMap.next(prevMove: PipePointMove): PipePointMove = move(source = prevMove.target, prevMove.nextDir())
+    fun PipeMap.nextMove(prevMove: PipePointMove): PipePointMove = move(source = prevMove.target, prevMove.nextDir())
 
-    fun PipeMap.detectPipeLoop(): List<PipePointMove> {
-        val moves = ArrayList<PipePointMove>()
-
-        val start = pipePoints.values.first { it.pipe == Pipe.START }
-        var move = firstNext(start)
-        moves += move
-        do {
-            move = next(move)
-            moves += move
-        } while (move.target != start)
-
-        return moves
-    }
+    fun PipeMap.detectPipeLoop(): List<PipePointMove> = pipePoints.values
+        .first { it.pipe == Pipe.START }
+        .let { start ->
+            generateSequence(firstNextMove(start)) { nextMove(it) }
+                .takeWhileInclusive { it.target != start }
+                .toList()
+        }
 
     fun pipeOf(dirs: Set<Dir>) = Pipe.entries.first { it.dirs == dirs }
 
