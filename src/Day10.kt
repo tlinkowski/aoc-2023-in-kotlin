@@ -1,276 +1,168 @@
+enum class Dir(val dx: Int, val dy: Int) {
+    DOWN(0, 1),
+    UP(0, -1),
+    LEFT(-1, 0),
+    RIGHT(1, 0)
+}
+
+enum class Pipe(val symbol: Char, val dirs: Set<Dir>) {
+    START('┼', Dir.entries.toSet()),
+    HORIZONTAL('─', setOf(Dir.LEFT, Dir.RIGHT)),
+    VERTICAL('│', setOf(Dir.UP, Dir.DOWN)),
+    DOWN_RIGHT('┌', setOf(Dir.DOWN, Dir.RIGHT)),
+    DOWN_LEFT('┐', setOf(Dir.DOWN, Dir.LEFT)),
+    UP_LEFT('┘', setOf(Dir.UP, Dir.LEFT)),
+    UP_RIGHT('└', setOf(Dir.UP, Dir.RIGHT))
+}
+
 fun main() {
     val day = "Day10"
 
     // MODEL
-    data class Point(val x: Int, val y: Int) {
-        fun move(dx: Int, dy: Int) = Point(x + dx, y + dy)
+    data class Point(val x: Int, val y: Int)
 
-        fun nextPoints() = listOf(
-            move(-1, 0),
-            move(1, 0),
-            move(0, -1),
-            move(0, 1)
-        )
-    }
+    data class PipePoint(val point: Point, val pipe: Pipe)
 
-    data class Pipe(val point: Point, val c: Char)
+    data class PipeMap(val pipePoints: Map<Point, PipePoint>)
 
-    data class PipeMap(val pipes: Map<Point, Pipe>)
+    data class PipePointMove(val sourceDir: Dir, val target: PipePoint)
 
     // PARSE
-    fun List<String>.parsePipeMap() = mapIndexedNotNull { y, line ->
+    fun List<String>.normalize() = map { line ->
         line
+            .replace('.', ' ')
+            .replace('S', '┼')
+            .replace('-', '─')
+            .replace('|', '│')
             .replace('F', '┌')
             .replace('L', '└')
             .replace('7', '┐')
             .replace('J', '┘')
-            .mapIndexedNotNull { x, c ->
-                if (c == '.') null else Pipe(Point(x, y), c)
-            }
+    }
+
+    fun Char.toPipe() = Pipe.entries.firstOrNull { it.symbol == this }
+
+    fun List<String>.parsePipeMap() = mapIndexedNotNull { y, line ->
+        line.mapIndexedNotNull { x, c -> c.toPipe()?.let { pipe -> PipePoint(Point(x, y), pipe) } }
     }
         .flatten()
         .associateBy { it.point }
         .let { PipeMap(it) }
 
     // SOLVE
-    fun PipeMap.move(p: Pipe, dx: Int, dy: Int) = pipes[p.point.move(dx, dy)]
+    fun Point.move(dir: Dir) = Point(x + dir.dx, y + dir.dy)
 
-    fun PipeMap.firstNext(p: Pipe): Pipe { // OK!
-        if (move(p, 1, 0)?.c in listOf('-', '┘', '┐')) {
-            return move(p, 1, 0)!!
-        }
-        if (move(p, -1, 0)?.c in listOf('-', '└', '┌')) {
-            return move(p, -1, 0)!!
-        }
-        if (move(p, 0, 1)?.c in listOf('|', '┘', '└')) {
-            return move(p, 0, 1)!!
-        }
-        if (move(p, 0, -1)?.c in listOf('|', '┐', '┌')) {
-            return move(p, 0, -1)!!
-        }
-        throw IllegalArgumentException(p.toString())
-    }
+    fun PipeMap.tryMove(source: PipePoint, dir: Dir): PipePointMove? = pipePoints[source.point.move(dir)]
+        ?.let { target -> PipePointMove(dir, target) }
 
-    fun PipeMap.next(prev: Pipe, cur: Pipe): Pipe {
-        if (cur.c in listOf('-', '└', '┌') && move(cur, 1, 0)?.c in listOf('-', '┘', '┐', 'S')
-            && prev != move(cur, 1, 0)
-        ) {
-            return move(cur, 1, 0)!!
-        }
-        if (cur.c in listOf('-', '┘', '┐') && move(cur, -1, 0)?.c in listOf('-', '└', '┌', 'S')
-            && prev != move(cur, -1, 0)
-        ) {
-            return move(cur, -1, 0)!!
-        }
-        if (cur.c in listOf('|', '┐', '┌') && move(cur, 0, 1)?.c in listOf('|', '┘', '└', 'S')
-            && prev != move(cur, 0, 1)
-        ) {
-            return move(cur, 0, 1)!!
-        }
-        if (cur.c in listOf('|', '┘', '└') && move(cur, 0, -1)?.c in listOf('|', '┐', '┌', 'S')
-            && prev != move(cur, 0, -1)
-        ) {
-            return move(cur, 0, -1)!!
-        }
-        throw IllegalArgumentException(cur.toString())
-    }
+    fun PipeMap.move(source: PipePoint, dir: Dir): PipePointMove = tryMove(source, dir)!!
 
-//    fun Pipe.isPotentialNext(cur: Pipe): Boolean {
-//        if (c == 'S') {
-//            return true
-//        }
-//        if (cur.c == '-' && c in listOf('-', '┘', '┐')) {
-//            return point == cur.point.move(1, 0) || point == cur.point.move(-1, 0)
-//        }
-//
-////        if (point == cur.point.move(1, 0))
-////
-////        return c in listOf('-', '┘', '┐') && point == cur.point.move(1, 0)
-////                || c in listOf('-', '└', '┌') && point == cur.point.move(-1, 0)
-////                || c in listOf('|', '┐', '┌') && point == cur.point.move(0, -1)
-////                || c in listOf('|', '┘', '└') && point == cur.point.move(0, 1)
-//    }
+    fun Dir.opposite(): Dir = Dir.entries.first { it.dx == -dx && it.dy == -dy }
 
-//    fun PipeMap.next(prev: Pipe, cur: Pipe): Pipe {
-//        val nextPoints = cur.point.nextPoints()
-//            .mapNotNull { pipes[it] }
-//            .filter { it != prev }
-//        return nextPoints
-//            .firstOrNull { it.isPotentialNext(cur) }
-//            ?: throw IllegalStateException(nextPoints.toString())
-//    }
+    fun PipePointMove.connectsBack() = sourceDir.opposite() in target.pipe.dirs
 
-    fun part1(input: List<String>): Long {
-        val pipeMap = input.parsePipeMap()
-        val start = pipeMap.pipes.values
-            .first { it.c == 'S' }
-        var prev = start
-        var cur = pipeMap.firstNext(start)
-        var length = 0
+    fun PipeMap.firstNext(start: PipePoint): PipePointMove = Dir.entries
+        .mapNotNull { dir -> tryMove(start, dir) }
+        .first { move -> move.connectsBack() }
+
+    fun PipePointMove.nextDir() = (target.pipe.dirs - sourceDir.opposite()).single()
+
+    fun PipeMap.next(prevMove: PipePointMove): PipePointMove = move(source = prevMove.target, prevMove.nextDir())
+
+    fun PipeMap.detectPipeLoop(): List<PipePointMove> {
+        val moves = ArrayList<PipePointMove>()
+
+        val start = pipePoints.values.first { it.pipe == Pipe.START }
+        var move = firstNext(start)
+        moves += move
         do {
-            println(cur)
-            val nextCur = pipeMap.next(prev, cur)
-            prev = cur
-            cur = nextCur
-            length++
-        } while (cur != start)
-        return (1 + length / 2).toLong()
+            move = next(move)
+            moves += move
+        } while (move.target != start)
+
+        return moves
     }
 
-//    fun Pipe.split() = when (c) {
-//        '┐', '┌', '└', '┘' -> listOf(Pipe(point, '-'), Pipe(point, '|'))
-//        else -> listOf(this)
-//    }
+    fun pipeOf(dirs: Set<Dir>) = Pipe.entries.first { it.dirs == dirs }
 
-    fun List<Char>.chunkedReduce(transform: (a: Char, b: Char) -> Char?): List<Char> {
-        var i = 0
-        val result = ArrayList<Char>()
-        while (i < size) {
-            if (i == size - 1) {
-                result.add(this[i])
-            } else {
-                val t = transform(this[i], this[i + 1])
-                if (t != null) {
-                    result.add(t)
-                    i++ // skip i + 1
-                } else {
-                    result.add(this[i])
-                }
-            }
-            i++
+    fun PipePointMove.withPipe(pipe: Pipe) = copy(target = target.copy(pipe = pipe))
+
+    fun List<PipePointMove>.normalizedStartMove() = last()
+        .also { start -> check(start.target.pipe == Pipe.START) { start } }
+        .let { start ->
+            val startDir1 = start.sourceDir.opposite()
+            val startDir2 = first().sourceDir
+            start.withPipe(pipeOf(setOf(startDir1, startDir2)))
         }
-        return result
+
+    fun List<PipePointMove>.replaceStart() = dropLast(1) + normalizedStartMove()
+
+    fun List<PipePoint>.xRange() = minOf { it.point.x }..maxOf { it.point.x }
+
+    fun List<PipePoint>.yRange() = minOf { it.point.y }..maxOf { it.point.y }
+
+    fun List<PipePoint>.allPoints() = xRange().flatMap { x -> yRange().map { y -> Point(x, y) } }
+
+    fun toNiceString(loop: List<PipePoint>, interior: Set<Point>): String {
+        val map = loop.associateBy { it.point }
+
+        fun symbol(p: Point) = if (p in interior) '▒' else map[p]?.pipe?.symbol ?: ' '
+
+        return loop.yRange().joinToString("\n") { y ->
+            loop.xRange().map { x -> symbol(Point(x, y)) }.joinToString("")
+        }
     }
 
-    fun List<Pipe>.isInside(p: Point): Boolean {
-        if (any { it.point == p }) {
+    fun Point.isInside(loop: List<PipePoint>): Boolean {
+        if (loop.any { move -> this == move.point }) {
             return false
         }
-        val pipes = this // flatMap { it.split() }
 
-        val sameXLowerY = pipes
-            .filter { it.point.x == p.x && it.point.y < p.y }
-            .filter { it.c != '|' }
-            .sortedBy { it.point.y }
-            .map { it.c }
-            .chunkedReduce { a, b -> if (a == '┐' && b == '└' || a == '┌' && b == '┘') '-' else null }
-        val sameXHigherY = pipes
-            .filter { it.point.x == p.x && it.point.y > p.y }
-            .filter { it.c != '|' }
-            .sortedBy { it.point.y }
-            .map { it.c }
-            .chunkedReduce { a, b -> if (a == '┐' && b == '└' || a == '┌' && b == '┘') '-' else null }
-        val sameYLowerX = pipes
-            .filter { it.point.y == p.y && it.point.x < p.x }
-            .filter { it.c != '-' }
+        val sameYLowerX = loop.filter { it.point.y == y && it.point.x < x }
+
+        val simpleVerticalIntersections = sameYLowerX
+            .count { it.pipe == Pipe.VERTICAL }
+
+        val edgeVerticalIntersections = sameYLowerX.asSequence()
+            .filter { it.pipe != Pipe.HORIZONTAL }
             .sortedBy { it.point.x }
-            .map { it.c }
-            .chunkedReduce { a, b -> if (a == '└' && b == '┐' || a == '┌' && b == '┘') '|' else null }
-        val sameYHigherX = pipes
-            .filter { it.point.y == p.y && it.point.x > p.x }
-            .filter { it.c != '-' }
-            .sortedBy { it.point.x }
-            .map { it.c }
-            .chunkedReduce { a, b -> if (a == '└' && b == '┐' || a == '┌' && b == '┘') '|' else null }
-        return sameXLowerY.size % 2 == 1
-                && sameXHigherY.size % 2 == 1
-                && sameYLowerX.size % 2 == 1
-                && sameYHigherX.size % 2 == 1
+            .map { it.pipe.symbol }
+            .zipWithNext { a, b -> "$a$b" }
+            .count { it in listOf("┌┘", "└┐") }
+
+        return (simpleVerticalIntersections + edgeVerticalIntersections) % 2 == 1
     }
 
-//    data class PipeDir(val pipe: Pipe, val dir: Int)
+    fun part1(input: List<String>): Long {
+        val normInput = input.normalize()
+        normInput.onEach(::println)
 
-    fun List<Pipe>.firstPointInside() = first { isInside(it.point) }.point
+        val pipeMap = normInput.parsePipeMap()
+        val loop = pipeMap.detectPipeLoop()
 
-    class PointFinder(val loop: Set<Point>) {
-        val seen = HashSet<Point>()
-        val minX = loop.minOf { it.x }
-        val minY = loop.minOf { it.y }
-        val maxX = loop.maxOf { it.x }
-        val maxY = loop.maxOf { it.y }
-
-        fun floodFill(p: Point): Set<Point> {
-            if (p in loop || !p.isValid()) {
-                return setOf()
-            }
-            val points = allPointsInside(p)
-            return if (points.any { it.isEdge() }) setOf() else points
-        }
-
-        fun Point.isValid() = x >= minX && y >= minY && x <= maxX && y <= maxY
-
-        fun Point.isEdge() = x == minX || y == minY || x == maxX || y == maxY
-
-        fun allPointsInside(p: Point): Set<Point> = setOf(p) + p.nextPoints()
-            .filter { it.isValid() }
-            .filter(seen::add)
-            .filter { it !in loop }
-            .flatMap { allPointsInside(it) }
+        return (loop.size / 2).toLong()
     }
 
     fun part2(input: List<String>): Long {
-        val pipeMap = input.parsePipeMap()
-        val start = pipeMap.pipes.values
-            .first { it.c == 'S' }
-        var prev = start
-        val pipeLoop = ArrayList<Pipe>()
+        val normInput = input.normalize()
 
-        var cur = pipeMap.firstNext(start)
-        do {
-            pipeLoop.add(cur)
-            val nextCur = pipeMap.next(prev, cur)
-            prev = cur
-            cur = nextCur
-        } while (cur != start)
-        pipeLoop.add(start) // TODO: replace S
+        val pipeMap = normInput.parsePipeMap()
+        val loop = pipeMap.detectPipeLoop()
+            .replaceStart()
+            .map { it.target }
 
-        val loopSet = pipeLoop.map { it.point }.toSet()
+        val interior = loop.allPoints()
+            .filter { it.isInside(loop) }
+            .toSet()
 
-        val pointsInside = input.flatMapIndexed { y, line ->
-            line.indices.map { x -> Point(x, y) }
-        }
-            .filter { it !in loopSet }
-            .filter { pipeLoop.isInside(it) }
+        println(toNiceString(loop, interior))
 
-        // 376 too low
-        // 739 too high
-
-        return pointsInside.size.toLong()
-
-//        val allPoints = input.flatMapIndexed { y, line ->
-//            line.indices.map { x -> Point(x, y) }
-//        }
-//
-//        val areas = allPoints
-//            .map { finder.floodFill(it) }
-//            .distinct()
-//            .onEach { println(it) }
-//
-//        // 376 too low
-//
-//        return areas.last().size.toLong()
-
-
-//        val seedPoints = input.flatMapIndexed { y, line ->
-//            line.indices.map { x -> Point(x, y) }
-//        }
-//            .filter { it !in loopSet }
-//            .filter { pipeLoop.isInside(it) }
-//
-//        val areas = seedPoints
-//            .map { PointFinder(loopSet).floodFill(it) }
-//            .distinct()
-//            .onEach { println(it) }
-//
-//        // 376 too low
-//        // 739 too high
-//
-//        return areas.sumOf { it.size }.toLong()
+        return interior.size.toLong()
     }
 
     // TESTS
-//    val part1 = part1(readInput("$day/test1"))
-//    check(part1 == 8L) { "Part 1: actual=$part1" }
+    val part1 = part1(readInput("$day/test1"))
+    check(part1 == 8L) { "Part 1: actual=$part1" }
 
     val part2 = part2(readInput("$day/test2"))
     check(part2 == 10L) { "Part 2: actual=$part2" }
@@ -283,6 +175,6 @@ fun main() {
 
     // RESULTS
     val input = readInput("$day/input")
-//    println("Part 1: " + part1(input))
+    println("Part 1: " + part1(input))
     println("Part 2: " + part2(input))
 }
