@@ -6,54 +6,53 @@ fun main() {
     // MODEL
     data class Point(val x: Int, val y: Int)
 
-    data class Galaxy(val id: Int, val point: Point)
+    data class Galaxy(val point: Point)
 
-    data class Universe(val galaxies: Map<Point, Galaxy>)
+    data class Universe(val galaxies: List<Galaxy>)
 
     // PARSE
-    fun List<String>.parseUniverse(expansionFactor: Int): Universe {
-        val emptyXs = this[0].indices
-            .filter { x -> all { line -> line[x] == '.' } }
-            .toSet()
-        val emptyYs = indices
-            .filter { y -> this[y].all { it == '.' } }
-            .toSet()
+    fun List<String>.parseUniverse(): Universe = flatMapIndexed { y, line ->
+        line.mapIndexedNotNull { x, c -> if (c == '#') Galaxy(Point(x, y)) else null }
+    }.let { Universe(it) }
 
-        fun expandPoint(x: Int, y: Int) = Point(
-            x + (expansionFactor - 1) * emptyXs.count { ex -> ex < x },
-            y + (expansionFactor - 1) * emptyYs.count { ey -> ey < y }
+    // SOLVE
+    fun Universe.absentXs() = galaxies.map { it.point.x }.toSet()
+        .let { presentXs -> (0..presentXs.max()) - presentXs }
+
+    fun Universe.absentYs() = galaxies.map { it.point.y }.toSet()
+        .let { presentYs -> (0..presentYs.max()) - presentYs }
+
+    fun Universe.expand(expansionFactor: Int): Universe {
+        val absentXs = absentXs()
+        val absentYs = absentYs()
+
+        fun Point.expand() = Point(
+            x = x + (expansionFactor - 1) * absentXs.count { it < x },
+            y = y + (expansionFactor - 1) * absentYs.count { it < y }
         )
 
-        var id = 0
-        return flatMapIndexed { y, line ->
-            line.mapIndexedNotNull { x, c -> if (c == '#') Galaxy(id++, expandPoint(x, y)) else null }
-        }
-            .associateBy { it.point }
+        return galaxies
+            .map { Galaxy(it.point.expand()) }
             .let { Universe(it) }
     }
 
-    // SOLVE
-
-    fun <T> combinations(c: Collection<T>): List<Pair<T, T>> {
-        return c.flatMapIndexed { i, a -> c.mapIndexedNotNull { j, b -> if (i < j) a to b else null } }
-
-//        return c.flatMap { a -> c.mapNotNull { b -> if (a != b) setOf(a, b) else null } }.toSet()
+    fun <T> Collection<T>.combinations(): List<Pair<T, T>> = flatMapIndexed { i, a ->
+        mapIndexedNotNull { j, b -> if (i < j) a to b else null }
     }
 
     fun Galaxy.distanceTo(o: Galaxy): Int = abs(point.x - o.point.x) + abs(point.y - o.point.y)
 
     fun part1(input: List<String>): Long {
-        val universe = input.parseUniverse(2)
+        val universe = input.parseUniverse().expand(expansionFactor = 2)
 
-        return combinations(universe.galaxies.values)
-            .sumOf { (a, b) -> a.distanceTo(b) }
-            .toLong()
+        return universe.galaxies.combinations()
+            .sumOf { (a, b) -> a.distanceTo(b).toLong() }
     }
 
     fun part2(input: List<String>): Long {
-        val universe = input.parseUniverse(1000000)
+        val universe = input.parseUniverse().expand(expansionFactor = 1000000)
 
-        return combinations(universe.galaxies.values)
+        return universe.galaxies.combinations()
             .sumOf { (a, b) -> a.distanceTo(b).toLong() }
     }
 
