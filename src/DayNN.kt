@@ -19,14 +19,16 @@ fun main() {
     }
 
     // TESTS
-    val part1 = part1(readInput("$day/test"))
-    check(part1 == 0L) { "Part 1: actual=$part1" }
+    val test1 = part1(readInput("$day/test"))
+    check(test1 == 0L) { "Test 1: $test1 (wrong)" }
 
-    val part2 = part2(readInput("$day/test"))
-    check(part2 == 0L) { "Part 2: actual=$part2" }
+    val test2 = part2(readInput("$day/test"))
+    check(test2 == 0L) { "Test 2: $test2 (wrong)" }
 
     // RESULTS
     val input = readInput("$day/input")
-    println("Part 1: " + part1(input))
-    println("Part 2: " + part2(input))
+    val part1 = part1(input)
+    check(part1 == 0L) { "Part 1: $part1 (wrong)" }
+    println("Part 1: $part1")
+    println("Part 2: ${part2(input)}")
 }
