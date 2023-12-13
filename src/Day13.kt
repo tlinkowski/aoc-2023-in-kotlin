@@ -1,97 +1,68 @@
-import java.lang.RuntimeException
+interface PlaneView {
+    val xMax: Int
+    val yMax: Int
+
+    fun symbol(x: Int, y: Int): Char
+}
 
 fun main() {
     val day = "Day13"
 
     // MODEL
-    data class Plane(
-        val hPlane: List<String>,
-        val vPlane: List<String>
-    ) {
-        override fun toString() = hPlane.joinToString("\n") +
-                "\n\n" + vPlane.joinToString("\n") + "\n"
+    class Plane(private val lines: List<String>) : PlaneView {
+        override val xMax
+            get() = lines[0].length - 1
+        override val yMax
+            get() = lines.size - 1
+
+        override fun symbol(x: Int, y: Int) = lines[y][x]
+    }
+
+    class InvertedPlane(private val plane: Plane) : PlaneView {
+        override val xMax
+            get() = plane.yMax
+        override val yMax
+            get() = plane.xMax
+
+        override fun symbol(x: Int, y: Int) = plane.symbol(y, x)
     }
 
     // PARSE
-    fun List<String>.invert() = this[0].indices.map { x ->
-        joinToString("") { line -> line[x].toString() }
-    }
-
-    fun List<String>.parsePlanes(): List<Plane> = joinToString("\n")
-        .split("\n\n")
+    fun List<String>.parsePlanes(): List<Plane> = joinToString("\n").split("\n\n")
         .filter { it.isNotBlank() }
-        .map { it.trim().lines() }
-        .map { Plane(it, it.invert()) }
+        .map { Plane(it.trim().lines()) }
 
     // SOLVE
-    fun List<String>.reflectionIndex(forbidden: Int = 0): Int? {
-        return ((1..<size) - forbidden).firstOrNull { left ->
-            val right = size - left
-            if (left <= right) {
-                (0..<left).all { i ->
-                    val diff = left - i - 1
-                    val iReflect = i + 2 * diff + 1
-//                    println("1 left=$left: i=$i -> iR=$iReflect")
-                    this[i] == this[iReflect]
-                }
-            } else {
-                (left..<size).all { i ->
-                    val diff = i - left
-                    val iReflect = i - 2 * diff - 1
-//                    println("2 left=$left: i=$i -> iR=$iReflect")
-                    this[i] == this[iReflect]
+    fun PlaneView.isMirrorLine(xRef: Int, expectedSmudges: Int): Boolean {
+        var actualSmudges = 0
+
+        val xRange = if (xRef <= xMax / 2) 0..<xRef else xRef..xMax
+        for (x in xRange) {
+            val xMirrored = 2 * xRef - x - 1
+            for (y in 0..yMax) {
+                if (symbol(x, y) != symbol(xMirrored, y) && ++actualSmudges > expectedSmudges) {
+                    return false
                 }
             }
         }
+
+        return actualSmudges == expectedSmudges
     }
 
-    fun Plane.reflectionNumber(): Int {
-        return vPlane.reflectionIndex()
-            ?: (100 * hPlane.reflectionIndex()!!)
-    }
+    fun PlaneView.mirrorIndexX(smudges: Int): Int? = (1..xMax).firstOrNull { x -> isMirrorLine(x, smudges) }
 
-    fun Plane.otherReflectionNumber(original: Int): Int? {
-        return vPlane.reflectionIndex(original)
-            ?: hPlane.reflectionIndex(original / 100)?.let { it * 100 }
-    }
+    fun Plane.mirrorIndexY(smudges: Int): Int = InvertedPlane(this).mirrorIndexX(smudges)!!
 
-    fun Char.opposite() = when (this) {
-        '#' -> '.'
-        '.' -> '#'
-        else -> throw RuntimeException(toString())
-    }
-
-    fun List<String>.removeSmudge(xs: Int, ys: Int): List<String> = mapIndexed { y, line ->
-        if (y == ys) line.mapIndexed { x, c -> if (x == xs) c.opposite() else c }.joinToString("") else line
-    }
-
-    fun Plane.removeSmudgeBF(): Sequence<Plane> = hPlane.asSequence().flatMapIndexed { y, line ->
-        line.indices.map { x -> hPlane.removeSmudge(x, y).let { Plane(it, it.invert()) } }
-    }
-
-    fun Plane.reflectionNumberWithSmudge(): Int {
-        val originalRN = reflectionNumber()
-        val removeSmudgeBF = removeSmudgeBF().toList()
-        val result = removeSmudgeBF
-            .firstNotNullOfOrNull { it.otherReflectionNumber(originalRN) }
-        check(result != null) {
-            this
-        }
-        return result
-        //.also { n -> println(it.toString() + "\n" + n)} }
-    }
+    fun Plane.reflectionLineNumer(smudges: Int): Int = mirrorIndexX(smudges) ?: (100 * mirrorIndexY(smudges))
 
     fun part1(input: List<String>): Long {
         val planes = input.parsePlanes()
-        return planes.sumOf { it.reflectionNumber().toLong() }
+        return planes.sumOf { it.reflectionLineNumer(smudges = 0).toLong() }
     }
 
     fun part2(input: List<String>): Long {
         val planes = input.parsePlanes()
-        return planes
-            .map { it.reflectionNumberWithSmudge().toLong() }
-            .onEach(::println)
-            .sum()
+        return planes.sumOf { it.reflectionLineNumer(smudges = 1).toLong() }
     }
 
     // TESTS
