@@ -1,93 +1,74 @@
 fun main() {
     val day = "Day05"
 
-    data class Mapper(
-        val mapperRanges: Map<LongRange, Long>
-    ) {
-        fun mapId(id: Long) = id + offsetForId(id)
+    // MODEL
+    class Mapper(val mapperRanges: Map<LongRange, Long>)
 
-        fun mapRange(inputRange: LongRange): List<LongRange> {
-            return splitInputRangeIntoPartsMatchingMapperRanges(inputRange)
-                .map { part -> part.offsetBy(offsetForPart(part)) }
-        }
+    class Almanac(val seedIds: List<Long>, val mappers: List<Mapper>)
 
-        private fun offsetForId(id: Long) = mapperRanges
-            .filterKeys { it.contains(id) }
-            .values
-            .singleOrNull() ?: 0
+    class Almanac2(val seedIdRanges: List<LongRange>, val mappers: List<Mapper>)
 
-        private fun offsetForPart(inputRangePart: LongRange) = mapperRanges
-            .filterKeys { it.contains(inputRangePart) }
-            .values
-            .singleOrNull() ?: 0
-
-        private fun splitInputRangeIntoPartsMatchingMapperRanges(inputRange: LongRange) = mapperRanges.keys
-            .fold(listOf(inputRange)) { parts, mapperRange ->
-                parts.flatMap { part -> part.splitUsing(mapperRange) }
-            }
-
-        private fun LongRange.splitUsing(other: LongRange): List<LongRange> {
-            val intersection = intersect(other)
-            if (intersection.isEmpty()) {
-                return listOf(this)
-            }
-
-            return listOf(
-                LongRange(start = start, endInclusive = intersection.start - 1),
-                intersection,
-                LongRange(start = intersection.endInclusive + 1, endInclusive = endInclusive)
-            ).filter { !it.isEmpty() }
-        }
-    }
-
-    data class Almanac(
-        val seeds: List<Long>,
-        val mappers: List<Mapper>
-    ) {
-        fun locationId(seedId: Long) = mappers
-            .fold(seedId) { id, mapper -> mapper.mapId(id) }
-
-        fun lowestLocationId() = seeds.minOf { locationId(it) }
-    }
-
-    data class Almanac2(
-        val seedRanges: List<LongRange>,
-        val mappers: List<Mapper>
-    ) {
-        fun lowestLocationId(): Long {
-            return mappers
-                .fold(seedRanges) { ranges, mapper -> ranges.flatMap(mapper::mapRange) }
-                .minOf { it.first }
-        }
-    }
-
-    fun parseMapper(part: String) = Mapper(
-        part.split("\n").drop(1)
-            .map { line -> line.split(" ").map { it.toLong() } }
-            .associate { (destStart, sourceStart, length) ->
-                (sourceStart..<sourceStart + length) to destStart - sourceStart
-            }
-    )
+    // PARSE
+    fun String.parseMapper(): Mapper = split("\n")
+        .drop(1)
+        .map { line -> line.toLongs() }
+        .associate { (destStart, sourceStart, length) ->
+            (sourceStart..<sourceStart + length) to destStart - sourceStart
+        }.let(::Mapper)
 
     fun parseAlmanac(input: List<String>): Almanac {
-        val text = input.joinToString("\n")
-        val parts = text.split("\n\n")
-        val seeds = parts[0].substringAfter(": ").toLongs()
-        val mappers = parts.drop(1)
-            .map { parseMapper(it) }
-        return Almanac(seeds, mappers)
+        val parts = input.joinToString("\n").split("\n\n")
+        val seedIds = parts[0].substringAfter(": ").toLongs()
+        val mappers = parts.drop(1).map { it.parseMapper() }
+        return Almanac(seedIds, mappers)
     }
 
     fun parseAlmanac2(input: List<String>): Almanac2 {
-        val text = input.joinToString("\n")
-        val parts = text.split("\n\n")
-        val seedRanges = parts[0].substringAfter(": ").toLongs()
-            .chunked(2)
-            .map { (start, length) -> start..<start + length }
-        val mappers = parts.drop(1)
-            .map { parseMapper(it) }
-        return Almanac2(seedRanges, mappers)
+        val parts = input.joinToString("\n").split("\n\n")
+        val seedIdRanges = parts[0].substringAfter(": ").toLongs()
+            .chunked(2) { (start, length) -> start..<start + length }
+        val mappers = parts.drop(1).map { it.parseMapper() }
+        return Almanac2(seedIdRanges, mappers)
     }
+
+    // SOLVE
+    fun Mapper.offsetForId(id: Long): Long = mapperRanges
+        .filterKeys { mapperRange -> id in mapperRange }
+        .values
+        .singleOrNull() ?: 0
+
+    fun Mapper.offsetForIdSubrange(idSubrange: LongRange): Long = mapperRanges
+        .filterKeys { mapperRange -> idSubrange in mapperRange }
+        .values
+        .singleOrNull() ?: 0
+
+    fun LongRange.boundaries() = listOf(first, last + 1)
+
+    fun LongRange.splitOnRanges(ranges: Collection<LongRange>): List<LongRange> = ranges.asSequence()
+        .flatMap { it.boundaries() }
+        .filter { i -> i in this }
+        .plus(boundaries())
+        .distinct()
+        .sorted()
+        .zipWithNext { i, j -> i..<j }
+        .filter { !it.isEmpty() }
+        .toList()
+
+    fun Mapper.mapId(id: Long): Long = id + offsetForId(id)
+
+    fun Mapper.mapIdRange(idRange: LongRange): List<LongRange> {
+        return idRange.splitOnRanges(mapperRanges.keys)
+            .map { idSubrange -> idSubrange.offsetBy(offsetForIdSubrange(idSubrange)) }
+    }
+
+    fun Almanac.locationId(seedId: Long): Long = mappers
+        .fold(seedId) { id, mapper -> mapper.mapId(id) }
+
+    fun Almanac.lowestLocationId(): Long = seedIds.minOf { locationId(it) }
+
+    fun Almanac2.lowestLocationId(): Long = mappers
+        .fold(seedIdRanges) { idRanges, mapper -> idRanges.flatMap(mapper::mapIdRange) }
+        .minOf { it.first }
 
     fun part1(input: List<String>): Long {
         val almanac = parseAlmanac(input)

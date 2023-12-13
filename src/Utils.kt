@@ -18,17 +18,12 @@ fun String.md5() = BigInteger(1, MessageDigest.getInstance("MD5").digest(toByteA
 
 fun String.toLongs() = split(" ").filter { it.isNotBlank() }.map { it.trim().toLong() }
 
-infix fun LongRange.intersect(other: LongRange) = LongRange(
-    start = kotlin.math.max(start, other.start),
-    endInclusive = kotlin.math.min(endInclusive, other.endInclusive)
-)
-
 fun LongRange.offsetBy(offset: Long) = LongRange(
     start = start + offset,
     endInclusive = endInclusive + offset
 )
 
-fun LongRange.contains(other: LongRange) = start <= other.start && other.endInclusive <= endInclusive
+operator fun LongRange.contains(other: LongRange) = first <= other.first && other.last <= last
 
 fun gcd(a: Long, b: Long) = (1..min(a, b)).reversed()
     .first { a % it == 0L && b % it == 0L }
