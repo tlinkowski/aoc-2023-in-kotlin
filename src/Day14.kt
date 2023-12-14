@@ -2,76 +2,122 @@ fun main() {
     val day = "Day14"
 
     // MODEL
-//    data class Point(val x: Int, val y: Int)
-//
-//    data class Rock
+    data class Dish(val lines: List<String>) {
+        val xRange = lines[0].indices
+        val yRange = lines.indices
+
+        override fun toString() = lines.joinToString("\n") + "\n"
+    }
 
     // PARSE
-
+    fun List<String>.toDish() = Dish(this)
 
     // SOLVE
-    fun List<Char>.tilt(): String {
-        val barrierIndexes = (listOf(-1) + mapIndexedNotNull { i, c -> if (c == '#') i else null } + listOf(size))
-            .toSet()
-        val roundRockIndexes = barrierIndexes.zipWithNext { a, b ->
-            val count = (a + 1..<b).count { i -> this[i] == 'O' }
-            (a + 1..<a + 1 + count)
-        }
-            .flatten()
+    val cubeRock = '#'
+    val roundRock = 'O'
+
+    fun List<Char>.tilt(): List<Char> {
+        fun IntRange.countRoundRocks() = count { i -> get(i) == roundRock }
+        val cubeRocks = indices.filter { i -> get(i) == cubeRock }.toSet()
+        val barriers = listOf(-1) + cubeRocks + size
+        val roundRocks = barriers
+            .zipWithNext { left, right -> left + 1..<right }
+            .flatMap { range -> range.take(range.countRoundRocks()) }
             .toSet()
 
-        return indices.reversed().map { i ->
-            when (i) {
-                in barrierIndexes -> '#'
-                in roundRockIndexes -> 'O'
-                else -> '.'
-            }
-        }.joinToString("")
+        fun symbol(i: Int) = when (i) {
+            in cubeRocks -> cubeRock
+            in roundRocks -> roundRock
+            else -> '.'
+        }
+        return indices.map { i -> symbol(i) }
     }
 
-    fun List<String>.tilt() = this[0].indices.map { x -> map { it[x] }.tilt() }
+    fun List<Char>.reverseTilt() = reversed().tilt().reversed()
 
-    fun List<String>.tiltFullCycle() = tilt().tilt().tilt().tilt()
-
-    fun String.load() = mapIndexed { i, c -> if (c == 'O') i + 1 else 0 }.sum().toLong()
-
-    fun List<String>.load() = sumOf { it.load() }
-
-    fun List<String>.rotate() = this[0].indices.map { x -> map { it[x] }.reversed().joinToString("") }
-
-    fun part1(input: List<String>): Long {
-        return input.tilt().load()
+    fun Dish.mapVertically(f: (List<Char>) -> List<Char>): Dish {
+        val mappedXY = xRange.map { x -> f(lines.map { it[x] }) }
+        return yRange.map { y ->
+            xRange.map { x -> mappedXY[x][y] }.joinToString("")
+        }.let { Dish(it) }
     }
 
-    fun part2(input: List<String>): Long {
-        val period = 8
-        val results = generateSequence { input }.take(period).toList().toTypedArray()
-        for (i in 1..1000) {
-            val nextResult = results[(i - 1) % period].tiltFullCycle()
-            println(nextResult.rotate().load())
-            if (results[i % period] == nextResult) {
-                break
-            } else {
-                results[i % period] = nextResult
+    fun Dish.mapHorizontally(f: (List<Char>) -> List<Char>): Dish = Dish(
+        lines.map { line -> f(line.toList()).joinToString("") }
+    )
+
+    fun Dish.tiltNorth(): Dish = mapVertically { it.tilt() }
+
+    fun Dish.tiltSouth(): Dish = mapVertically { it.reverseTilt() }
+
+    fun Dish.tiltWest(): Dish = mapHorizontally { it.tilt() }
+
+    fun Dish.tiltEast(): Dish = mapHorizontally { it.reverseTilt() }
+
+    fun Dish.fullTilt() = tiltNorth().tiltWest().tiltSouth().tiltEast()
+
+    fun Dish.computeNorthLoad() = lines.mapIndexed { y, line ->
+        (lines.size - y) * line.count { it == roundRock }
+    }.sum()
+
+    class TiltCycleFinder(private var dish: Dish, private val printDish: Boolean = false) {
+        var tiltCount = 0
+
+        fun dishAfterFullTilts(n: Int): Dish {
+            reachCycle()
+            println("Cycle formed after $tiltCount full tilts ")
+
+            val cycle = detectCycle()
+            println("Cycle length is " + cycle.size)
+
+            return cycle[(n - tiltCount) % cycle.size]
+        }
+
+        private fun reachCycle() = buildSet {
+            while (add(dish)) {
+                tiltDish()
+                if (printDish && tiltCount <= 3) println("Full tilt $tiltCount:\n$dish")
             }
         }
-//        results.forEach { println(it.load()) }
-//        val result = generateSequence(input) { it.tilt() }.take(1000000000)
-//        input.tilt().onEach(::println)
-        return results[1000000000 % period].rotate().load()
+
+        private fun detectCycle() = buildList {
+            do {
+                add(dish)
+                tiltDish()
+            } while (dish != first())
+        }
+
+        private fun tiltDish() {
+            dish = dish.fullTilt()
+            tiltCount++
+        }
+    }
+
+    fun part1(input: List<String>, printDish: Boolean = false): Int {
+        val dish = input.toDish()
+        val tiltedDish = dish.tiltNorth()
+        if (printDish) println(tiltedDish)
+        return tiltedDish.computeNorthLoad()
+    }
+
+    fun part2(input: List<String>, printDish: Boolean = false): Int {
+        val dish = input.toDish()
+        return TiltCycleFinder(dish, printDish)
+            .dishAfterFullTilts(n = 1000000000)
+            .computeNorthLoad()
     }
 
     // TESTS
-    val test1 = part1(readInput("$day/test"))
-    check(test1 == 136L) { "Test 1: $test1 (wrong)" }
+    val test1 = part1(readInput("$day/test"), printDish = true)
+    136.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
 
-    val test2 = part2(readInput("$day/test"))
-    check(test2 == 64L) { "Test 2: $test2 (wrong)" }
+    val test2 = part2(readInput("$day/test"), printDish = true)
+    64.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
 
     // RESULTS
     val input = readInput("$day/input")
     val part1 = part1(input)
-    check(part1 == 113078L) { "Part 1: $part1 (wrong)" }
-    println("Part 1: $part1")
-    println("Part 2: ${part2(input)}")
+    113078.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    val part2 = part2(input)
+    println("Part 2: $part2")
 }

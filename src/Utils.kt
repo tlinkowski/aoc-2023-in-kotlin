@@ -39,3 +39,7 @@ fun <T> Sequence<T>.takeWhileInclusive(predicate: (T) -> Boolean) = sequence {
         }
     }
 }
+
+inline fun <reified E : Enum<E>> E.prev(): E = E::class.java.enumConstants.let { it[(ordinal + it.size - 1) % it.size] }
+
+inline fun <reified E : Enum<E>> E.next(): E = E::class.java.enumConstants.let { it[(ordinal + 1) % it.size] }

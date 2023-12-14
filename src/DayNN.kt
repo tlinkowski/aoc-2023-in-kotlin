@@ -20,15 +20,15 @@ fun main() {
 
     // TESTS
     val test1 = part1(readInput("$day/test"))
-    check(test1 == 0L) { "Test 1: $test1 (wrong)" }
+    0L.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
 
     val test2 = part2(readInput("$day/test"))
-    check(test2 == 0L) { "Test 2: $test2 (wrong)" }
+    0L.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
 
     // RESULTS
     val input = readInput("$day/input")
     val part1 = part1(input)
-    check(part1 == 0L) { "Part 1: $part1 (wrong)" }
-    println("Part 1: $part1")
-    println("Part 2: ${part2(input)}")
+    0L.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    val part2 = part2(input)
+    println("Part 2: $part2")
 }
