@@ -1,10 +1,3 @@
-enum class Dir(val dx: Int, val dy: Int) {
-    DOWN(0, 1),
-    UP(0, -1),
-    LEFT(-1, 0),
-    RIGHT(1, 0)
-}
-
 enum class Pipe(val symbol: Char, val dirs: Set<Dir>) {
     START('┼', Dir.entries.toSet()),
     HORIZONTAL('─', setOf(Dir.LEFT, Dir.RIGHT)),
@@ -19,8 +12,6 @@ fun main() {
     val day = "Day10"
 
     // MODEL
-    data class Point(val x: Int, val y: Int)
-
     data class PipePoint(val point: Point, val pipe: Pipe)
 
     data class PipeMap(val pipePoints: Map<Point, PipePoint>)
@@ -50,14 +41,10 @@ fun main() {
         .let { PipeMap(it) }
 
     // SOLVE
-    fun Point.move(dir: Dir) = Point(x + dir.dx, y + dir.dy)
-
     fun PipeMap.tryMove(source: PipePoint, dir: Dir): PipePointMove? = pipePoints[source.point.move(dir)]
         ?.let { target -> PipePointMove(dir, target) }
 
     fun PipeMap.move(source: PipePoint, dir: Dir): PipePointMove = tryMove(source, dir)!!
-
-    fun Dir.opposite(): Dir = Dir.entries.first { it.dx == -dx && it.dy == -dy }
 
     fun PipePointMove.connectsBack() = sourceDir.opposite() in target.pipe.dirs
 

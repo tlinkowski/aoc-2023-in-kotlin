@@ -2,122 +2,88 @@ fun main() {
     val day = "Day16"
 
     // MODEL
-    data class Point(val x: Int, val y: Int)
-
-    data class Contraption(
-        val xRange: IntRange,
-        val yRange: IntRange,
-        val map: Map<Point, Char>
+    class Contraption(
+        val gridRange: GridRange,
+        val pointMap: Map<Point, Char>
     )
 
-    data class Beam(val p: Point, val dir: Dir)
+    data class Beam(val point: Point, val dir: Dir)
 
     // PARSE
     fun List<String>.parseContraption() = Contraption(
-        xRange = first().indices,
-        yRange = indices,
-        map = flatMapIndexed { y, line ->
-            line.mapIndexedNotNull { x, c -> if (c != '.') Point(x, y) to c else null }
-        }.toMap()
+        gridRange = toGridRange(),
+        pointMap = toPointMap().filterValues { it != '.' }
     )
 
     // SOLVE
-    operator fun Contraption.contains(p: Point) = p.x in xRange && p.y in yRange
+    operator fun Contraption.contains(beam: Beam) = beam.point in gridRange
 
-    operator fun Contraption.contains(b: Beam) = b.p in this
+    fun Beam.nextBeam(nextDir: Dir) = Beam(point.move(nextDir), nextDir)
 
-    fun Point.move(d: Dir) = Point(x + d.dx, y + d.dy)
+    fun Dir.nextDirs(symbol: Char?): List<Dir> {
+        fun cw() = listOf(turnCW())
+        fun ccw() = listOf(turnCCW())
+        fun split() = cw() + ccw()
+        fun keep() = listOf(this)
 
-    fun Beam.move() = Beam(p.move(dir), dir)
-
-    fun Beam.changeDir(nd: Dir) = Beam(p.move(nd), nd)
-
-    fun Contraption.move(b: Beam) = when (map[b.p]) {
-        '/' -> when (b.dir) {
-            Dir.LEFT -> Dir.DOWN
-            Dir.RIGHT -> Dir.UP
-            Dir.DOWN -> Dir.LEFT
-            Dir.UP -> Dir.RIGHT
-        }.let { listOf(b.changeDir(it)) }
-        '\\' -> when (b.dir) {
-            Dir.LEFT -> Dir.UP
-            Dir.RIGHT -> Dir.DOWN
-            Dir.DOWN -> Dir.RIGHT
-            Dir.UP -> Dir.LEFT
-        }.let { listOf(b.changeDir(it)) }
-        '|' -> when (b.dir) {
-            Dir.UP, Dir.DOWN -> listOf(b.move())
-            Dir.LEFT, Dir.RIGHT -> listOf(
-                b.changeDir(Dir.UP),
-                b.changeDir(Dir.DOWN)
-            )
+        val vertical = isVertical()
+        return when (symbol) {
+            '/' -> if (vertical) cw() else ccw()
+            '\\' -> if (vertical) ccw() else cw()
+            '-' -> if (vertical) split() else keep()
+            '|' -> if (vertical) keep() else split()
+            else -> keep()
         }
-        '-' -> when (b.dir) {
-            Dir.LEFT, Dir.RIGHT -> listOf(b.move())
-            Dir.UP, Dir.DOWN -> listOf(
-                b.changeDir(Dir.LEFT),
-                b.changeDir(Dir.RIGHT)
-            )
-        }
-        else -> listOf(b.move())
-    }.filter { it in this }
-
-    fun print(c: Contraption, b: List<Beam>) {
-        val map = c.map + b.associate {
-            it.p to it.dir.name[0]
-        }
-        c.yRange.forEach { y ->
-            c.xRange.forEach { x -> print(map.getOrDefault(Point(x, y), ' ')) }
-            println()
-        }
-        println()
     }
 
-    fun energeizedPoints(startBeam: Beam, contraption: Contraption): Int {
-        val energizedPoints = HashSet<Point>()
+    fun Contraption.nextBeams(beam: Beam): List<Beam> = beam.dir
+        .nextDirs(pointMap[beam.point])
+        .map { dir -> beam.nextBeam(dir) }
+        .filter { it in this }
 
-        var beams = listOf(startBeam)
-        val seenBeams = mutableSetOf<Beam>()
-
-        while (beams.isNotEmpty()) {
-    //            print(contraption, beams)
-    //            println("Beams: ${beams.size}")
-            val newBeams = beams.flatMap { contraption.move(it) }
-                .filter { seenBeams.add(it) }
-            newBeams.forEach { energizedPoints += it.p }
-            beams = newBeams
+    fun Contraption.toString(beams: List<Beam>): String {
+        val combinedMap = pointMap + beams.associate { it.point to it.dir.symbol }
+        return gridRange.yRange.joinToString("\n") { y ->
+            gridRange.xRange.map { x -> combinedMap.getOrDefault(Point(x, y), '.') }.joinToString("")
         }
-
-        return energizedPoints.size
     }
 
-    fun part1(input: List<String>): Int {
+    fun Contraption.findAllBeams(startBeam: Beam, print: Boolean): Set<Beam> = buildSet {
+        var currentBeams = listOf(startBeam)
+        do { // BFS
+            if (print) println(toString(currentBeams) + "\n")
+            currentBeams = currentBeams
+                .filter { beam -> add(beam) }
+                .flatMap { beam -> nextBeams(beam) }
+        } while (currentBeams.isNotEmpty())
+    }
+
+    fun Contraption.energizedPoints(startBeam: Beam, print: Boolean = false): Set<Point> =
+        findAllBeams(startBeam, print).asSequence().map { it.point }.toSet()
+
+    fun GridRange.startBeams() = listOf(
+        pointsAtX(x = 0).map { p -> Beam(p, Dir.RIGHT) },
+        pointsAtY(y = 0).map { p -> Beam(p, Dir.DOWN) },
+        pointsAtX(x = xRange.last).map { p -> Beam(p, Dir.LEFT) },
+        pointsAtY(y = yRange.last).map { p -> Beam(p, Dir.UP) }
+    ).flatten()
+
+    fun part1(input: List<String>, print: Boolean = false): Int {
         val contraption = input.parseContraption()
-        val startBeam = Beam(Point(-1, 0), Dir.RIGHT)
+        val startBeam = Beam(Point(0, 0), Dir.RIGHT)
 
-        return energeizedPoints(startBeam, contraption)
+        return contraption.energizedPoints(startBeam, print).size
     }
 
     fun part2(input: List<String>): Int {
         val contraption = input.parseContraption()
 
-        val startBeams = contraption.yRange.flatMap { y ->
-            listOf(
-                Beam(Point(-1, y), Dir.RIGHT),
-                Beam(Point(contraption.xRange.last + 1, y), Dir.LEFT)
-            )
-        } + contraption.xRange.flatMap { x ->
-            listOf(
-                Beam(Point(x, -1), Dir.DOWN),
-                Beam(Point(x, contraption.yRange.last + 1), Dir.UP)
-            )
-        }
-        return startBeams.maxOf { sb -> energeizedPoints(sb, contraption) }
-
+        return contraption.gridRange.startBeams()
+            .maxOf { startBeam -> contraption.energizedPoints(startBeam).size }
     }
 
     // TESTS
-    val test1 = part1(readInput("$day/test"))
+    val test1 = part1(readInput("$day/test"), print = true)
     46.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
 
     val test2 = part2(readInput("$day/test"))
@@ -126,7 +92,7 @@ fun main() {
     // RESULTS
     val input = readInput("$day/input")
     val part1 = part1(input)
-    0.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    6361.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
     val part2 = part2(input)
     println("Part 2: $part2")
 }

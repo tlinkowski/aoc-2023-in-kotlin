@@ -4,9 +4,7 @@ import kotlin.math.abs
 fun main() {
     val day = "Day03"
 
-    data class Point(val x: Int, val y: Int) {
-        fun isAdjacent(other: Point) = abs(x - other.x) <= 1 && abs(y - other.y) <= 1
-    }
+    fun Point.isAdjacent(other: Point) = abs(x - other.x) <= 1 && abs(y - other.y) <= 1
 
     data class Number(val value: Int, val points: Set<Point>)
 

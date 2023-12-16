@@ -4,8 +4,6 @@ fun main() {
     val day = "Day11"
 
     // MODEL
-    data class Point(val x: Int, val y: Int)
-
     data class Galaxy(val point: Point)
 
     data class Universe(val galaxies: List<Galaxy>)

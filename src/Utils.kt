@@ -40,6 +40,41 @@ fun <T> Sequence<T>.takeWhileInclusive(predicate: (T) -> Boolean) = sequence {
     }
 }
 
-inline fun <reified E : Enum<E>> E.prev(): E = E::class.java.enumConstants.let { it[(ordinal + it.size - 1) % it.size] }
+inline fun <reified E : Enum<E>> E.prev(): E = enumValues<E>().let { it[(ordinal + it.size - 1) % it.size] }
 
-inline fun <reified E : Enum<E>> E.next(): E = E::class.java.enumConstants.let { it[(ordinal + 1) % it.size] }
+inline fun <reified E : Enum<E>> E.next(): E = enumValues<E>().let { it[(ordinal + 1) % it.size] }
+
+enum class Dir(val dx: Int, val dy: Int, val symbol: Char) {
+    UP(0, -1, '▲'),
+    RIGHT(1, 0, '▶'),
+    DOWN(0, 1, '▼'),
+    LEFT(-1, 0, '◀');
+
+    fun isHorizontal() = dy == 0
+
+    fun isVertical() = dx == 0
+
+    fun turnCW(): Dir = next()
+
+    fun turnCCW(): Dir = prev()
+
+    fun opposite(): Dir = next().next()
+
+}
+
+data class Point(val x: Int, val y: Int) {
+    fun move(dir: Dir) = Point(x + dir.dx, y + dir.dy)
+}
+
+data class GridRange(val xRange: IntRange, val yRange: IntRange) {
+
+    operator fun contains(p: Point) = p.x in xRange && p.y in yRange
+
+    fun pointsAtX(x: Int) = yRange.map { y -> Point(x, y) }
+
+    fun pointsAtY(y: Int) = xRange.map { x -> Point(x, y) }
+}
+
+fun List<String>.toGridRange() = GridRange(xRange = first().indices, yRange = indices)
+
+fun List<String>.toPointMap() = flatMapIndexed { y, line -> line.mapIndexed { x, c -> Point(x, y) to c } }.toMap()
