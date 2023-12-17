@@ -1,8 +1,16 @@
+import java.util.*
+
 fun main() {
     val day = "Day17"
 
     // MODEL
-    data class City(val gridRange: GridRange, val map: Map<Point, Int>)
+    class City(val gridRange: GridRange, val heatLossMap: Map<Point, Int>)
+
+    data class Origin(val dir: Dir?, val dirCount: Int)
+
+    data class Key(val point: Point, val origin: Origin)
+
+    data class Result(val key: Key, val minHeatLoss: Int)
 
     // PARSE
     fun List<String>.parseCity() = City(
@@ -11,77 +19,102 @@ fun main() {
     )
 
     // SOLVE
-    data class Key(val p: Point, val lastDir: Dir?, val lastDirCount: Int)
+    class DijkstraResultStorage {
 
-    data class Moment(val k: Key, val visited: Set<Point>)
+        private val visited: MutableMap<Point, MutableSet<Origin>> = mutableMapOf()
+        private val minHeatLosses: MutableMap<Point, MutableMap<Origin, Int>> = mutableMapOf()
+        private val unvisitedQueue: PriorityQueue<Result> = PriorityQueue(compareBy { it.minHeatLoss })
 
-    fun City.tryMove(m: Moment, dir: Dir): Key? = dir
-        .takeIf { d -> d != m.k.lastDir?.opposite()}
-        .takeIf { d -> if (d == m.k.lastDir) m.k.lastDirCount < 10 else m.k.lastDir == null || m.k.lastDirCount >= 4 }
-        ?.let { d -> m.k.p.move(d) }
-        ?.takeIf { it in gridRange && it !in m.visited }
-        ?.let {
-            Key(
-                it,
-                dir,
-                if (dir == m.k.lastDir) m.k.lastDirCount + 1 else 1
-            )
+        fun popUnvisitedResult(): Result = unvisitedQueue.poll()!!.also { (key) -> visitedAt(key.point) += key.origin }
+
+        fun visitedAt(point: Point) = visited.computeIfAbsent(point) { mutableSetOf() }
+
+        fun minHeatLossesAt(point: Point) = minHeatLosses.computeIfAbsent(point) { mutableMapOf() }
+
+        fun isVisited(key: Key) = key.origin in visitedAt(key.point)
+
+        fun register(result: Result) {
+            val key = result.key
+            val minHeatLosses = minHeatLossesAt(key.point)
+
+            val oldLoss = minHeatLosses[key.origin]
+            if (oldLoss == null || oldLoss > result.minHeatLoss) {
+                minHeatLosses[key.origin] = result.minHeatLoss
+                if (!isVisited(key)) fixUnvisitedQueue(result, oldLoss)
+            }
         }
+
+        private fun fixUnvisitedQueue(result: Result, oldLoss: Int?) {
+            if (oldLoss != null) unvisitedQueue -= Result(result.key, oldLoss)
+            unvisitedQueue += result
+        }
+    }
+
+    fun startResult() = Result(Key(Point(0, 0), Origin(null, 0)), 0)
 
     fun GridRange.endpoint() = Point(xRange.last, yRange.last)
 
-    fun City.isEndpoint(p: Point) = p == gridRange.endpoint()
+    fun Origin.next(nextDir: Dir) = Origin(nextDir, if (nextDir == dir) dirCount + 1 else 1)
 
-    fun City.minHeatLoss(start: Point, cache: MutableMap<Key, Long>): Long { // BFS
-        val startKey = Key(start, null, 0)
-        cache[startKey] = 0
-        var curMoments = listOf(Moment(startKey, setOf(start)))
+    fun Key.next(nextDir: Dir) = Key(point.move(nextDir), origin.next(nextDir))
 
-        do {
-            println("Cur count ${curMoments.size}")
-            curMoments = curMoments.flatMap { m ->
-                if (isEndpoint(m.k.p)) {
-                    listOf(m)
-                } else {
-                    val refMinHeatLoss = cache[m.k]!!
-                    val nextKeys = Dir.entries
-                        .mapNotNull { dir -> tryMove(m, dir) }
-                        .filter { nk ->
-                            val newMinHeatLoss = refMinHeatLoss + map[nk.p]!!
-                            val oldMinHeatLoss = cache[nk]
-                            if (oldMinHeatLoss == null || newMinHeatLoss < oldMinHeatLoss) {
-                                cache[nk] = newMinHeatLoss
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    nextKeys.map { Moment(it, m.visited + m.k.p)}
-                }
-            }//.distinctBy { it.k }
-        } while (!curMoments.all { isEndpoint(it.k.p) })
+    fun City.minHeatLoss(canMove: (Dir, Origin) -> Boolean, canAccept: (Origin) -> Boolean): Int {
+        val resultStorage = DijkstraResultStorage()
+        resultStorage.register(startResult())
 
-        return curMoments.minOf { cache[it.k]!! }
+        val endpoint = gridRange.endpoint()
+        fun canTerminate() = resultStorage.visitedAt(endpoint).any(canAccept)
+        while (!canTerminate()) { // Dijkstra's algorithm (BFS + priority queue)
+            val curResult = resultStorage.popUnvisitedResult()
+            fun nextMinHeatLoss(key: Key) = curResult.minHeatLoss + heatLossMap[key.point]!!
+
+            val curKey = curResult.key
+            Dir.entries
+                .filter { nextDir -> canMove(nextDir, curKey.origin) }
+                .map { nextDir -> curKey.next(nextDir) }
+                .filter { nextKey -> nextKey.point in gridRange && !resultStorage.isVisited(nextKey) }
+                .map { nextKey -> Result(nextKey, nextMinHeatLoss(nextKey)) }
+                .forEach(resultStorage::register)
+        }
+
+        return resultStorage.minHeatLossesAt(endpoint)
+            .filterKeys(canAccept)
+            .minOf { it.value }
     }
 
-    fun part2(input: List<String>): Long {
+    fun part1(input: List<String>): Int {
         val city = input.parseCity()
+        fun canMove(nextDir: Dir, origin: Origin) = when (origin.dir) {
+            nextDir -> origin.dirCount < 3
+            nextDir.opposite() -> false
+            else -> true
+        }
+        return city.minHeatLoss(::canMove) { true }
+    }
 
-        println("Input grid: ${city.gridRange}")
-        return city.minHeatLoss(Point(0, 0), mutableMapOf())
+    fun part2(input: List<String>): Int {
+        val city = input.parseCity()
+        fun canAccept(origin: Origin) = origin.dirCount >= 4
+        fun canMove(nextDir: Dir, origin: Origin) = when (origin.dir) {
+            nextDir -> origin.dirCount < 10
+            nextDir.opposite() -> false
+            null -> true // first move
+            else -> canAccept(origin)
+        }
+        return city.minHeatLoss(::canMove, ::canAccept)
     }
 
     // TESTS
-//    val test1 = part1(readInput("$day/test"))
-//    102L.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
+    val test1 = part1(readInput("$day/test"))
+    102.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
 
     val test2 = part2(readInput("$day/test"))
-    94L.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
+    94.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
 
     // RESULTS
     val input = readInput("$day/input")
-//    val part1 = part1(input)
-//    1263L.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    val part1 = part1(input)
+    1263.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
     val part2 = part2(input)
     println("Part 2: $part2")
 }
