@@ -82,3 +82,16 @@ data class GridRange(val xRange: IntRange, val yRange: IntRange) {
 fun List<String>.toGridRange() = GridRange(xRange = first().indices, yRange = indices)
 
 fun List<String>.toPointMap() = flatMapIndexed { y, line -> line.mapIndexed { x, c -> Point(x, y) to c } }.toMap()
+
+fun <T> List<T>.toGridRange(mapper: (T) -> Point) = GridRange(
+    xRange = minOf { mapper(it).x }..maxOf { mapper(it).x },
+    yRange = minOf { mapper(it).y }..maxOf { mapper(it).y }
+)
+
+fun GridRange.toNiceString(mapper: (Point) -> Char) = yRange.joinToString("\n") { y ->
+    xRange.map { x -> mapper(Point(x, y)) }.joinToString("")
+}
+
+fun <T, R> List<T>.zipWithNextCircular(transform: (a: T, b: T) -> R): List<R> = indices.map { i ->
+    transform(this[i], this[(i + 1) % size])
+}

@@ -78,20 +78,11 @@ fun main() {
 
     fun List<PipePointMove>.replaceStart() = dropLast(1) + normalizedStartMove()
 
-    fun List<PipePoint>.xRange() = minOf { it.point.x }..maxOf { it.point.x }
-
-    fun List<PipePoint>.yRange() = minOf { it.point.y }..maxOf { it.point.y }
-
-    fun List<PipePoint>.allPoints() = xRange().flatMap { x -> yRange().map { y -> Point(x, y) } }
+    fun List<PipePoint>.toGridRange() = toGridRange { it.point }
 
     fun toNiceString(loop: List<PipePoint>, interior: Set<Point>): String {
         val map = loop.associateBy { it.point }
-
-        fun symbol(p: Point) = if (p in interior) '▒' else map[p]?.pipe?.symbol ?: ' '
-
-        return loop.yRange().joinToString("\n") { y ->
-            loop.xRange().map { x -> symbol(Point(x, y)) }.joinToString("")
-        }
+        return loop.toGridRange().toNiceString { p -> if (p in interior) '▒' else map[p]?.pipe?.symbol ?: ' ' }
     }
 
     fun Point.isInside(loop: List<PipePoint>): Boolean {
@@ -132,7 +123,7 @@ fun main() {
             .replaceStart()
             .map { it.target }
 
-        val interior = loop.allPoints()
+        val interior = loop.toGridRange().allPoints()
             .filter { it.isInside(loop) }
             .toSet()
 

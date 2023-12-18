@@ -43,9 +43,7 @@ fun main() {
 
     fun Contraption.toString(beams: List<Beam>): String {
         val combinedMap = pointMap + beams.associate { it.point to it.dir.symbol }
-        return gridRange.yRange.joinToString("\n") { y ->
-            gridRange.xRange.map { x -> combinedMap.getOrDefault(Point(x, y), '.') }.joinToString("")
-        }
+        return gridRange.toNiceString { p -> combinedMap.getOrDefault(p, '.') }
     }
 
     fun Contraption.findAllBeams(startBeam: Beam, print: Boolean): Set<Beam> = buildSet {
