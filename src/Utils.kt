@@ -63,7 +63,9 @@ enum class Dir(val dx: Int, val dy: Int, val symbol: Char) {
 }
 
 data class Point(val x: Int, val y: Int) {
-    fun move(dir: Dir) = Point(x + dir.dx, y + dir.dy)
+    fun move(dir: Dir) = move(dir, 1)
+
+    fun move(dir: Dir, n: Int) = Point(x + n * dir.dx, y + n * dir.dy)
 }
 
 data class GridRange(val xRange: IntRange, val yRange: IntRange) {
@@ -73,6 +75,8 @@ data class GridRange(val xRange: IntRange, val yRange: IntRange) {
     fun pointsAtX(x: Int) = yRange.map { y -> Point(x, y) }
 
     fun pointsAtY(y: Int) = xRange.map { x -> Point(x, y) }
+
+    fun allPoints() = xRange.flatMap { x -> pointsAtX(x) }
 }
 
 fun List<String>.toGridRange() = GridRange(xRange = first().indices, yRange = indices)
