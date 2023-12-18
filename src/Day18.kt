@@ -9,8 +9,6 @@ fun main() {
 
     data class DigPlan(val moves: List<DigMove>)
 
-    data class CornerPoint(val point: Point, val sourceMove: DigMove)
-
     // PARSE
     fun String.parseDigMove() = split(" ").let { (dir, meters, color) ->
         DigMove(
@@ -39,58 +37,35 @@ fun main() {
 
     fun DigPlan.expand() = DigPlan(moves.map { it.expand() })
 
-    fun CornerPoint.move(move: DigMove) = CornerPoint(point.move(move.dir, move.meters), move)
+    fun Point.nextCorner(move: DigMove) = move(move.dir, move.meters)
 
-    fun DigPlan.findCornerPoints(start: Point) = moves.dropLast(1)
-        .runningFold(CornerPoint(start, moves.last()), CornerPoint::move)
+    fun DigPlan.findCornerPoints(start: Point) = moves.runningFold(start, Point::nextCorner)
 
-    fun CornerPoint.offset(dir: Dir) = copy(point = point.move(dir))
+    fun List<Point>.toNiceString(): String {
+        data class Segment(val a: Point, val b: Point)
 
-    // without offsetting, the area would not include bottom-right points
-    fun List<CornerPoint>.offsetTwoSides(): List<CornerPoint> {
-        val points = toMutableList()
-        for (i in points.indices) {
-            val j = (i + 1) % points.size
-            val offsetDir = when (points[j].sourceMove.dir) {
-                Dir.DOWN -> Dir.RIGHT
-                Dir.LEFT -> Dir.DOWN
-                else -> null
-            }
-            if (offsetDir != null) {
-                points[i] = points[i].offset(offsetDir)
-                points[j] = points[j].offset(offsetDir)
-            }
-        }
-        return points
-    }
-
-    fun List<CornerPoint>.toNiceString(): String {
-        data class Segment(val a: Point, val b: Point, val dir: Dir)
-
-        operator fun Segment.contains(p: Point) = p != b // end is exclusive
-                && (p.x in a.x..b.x || p.x in b.x..a.x)
+        operator fun Segment.contains(p: Point) = (p.x in a.x..b.x || p.x in b.x..a.x)
                 && (p.y in a.y..b.y || p.y in b.y..a.y)
 
-        val segments = zipWithNextCircular { a, b -> Segment(a.point, b.point, b.sourceMove.dir) }
-        fun symbol(p: Point) = segments.firstOrNull { segment -> p in segment }
-            ?.let { if (p == it.a) it.dir.symbol else '#' }
-            ?: '.'
-
-        return toGridRange { it.point }.toNiceString(::symbol)
+        val segments = zipWithNextCircular(::Segment)
+        return toGridRange { it }.toNiceString { p ->
+            if (segments.any { segment -> p in segment }) '#' else '.'
+        }
     }
 
     fun DigPlan.digArea(print: Boolean = false): Long {
         val cornerPoints = findCornerPoints(Point(0, 0))
-        if (print) println("Before offset:\n" + cornerPoints.toNiceString())
+        if (print) println("Trench:\n" + cornerPoints.toNiceString())
 
-        val offsetPoints = cornerPoints.offsetTwoSides()
-        if (print) println("After offset:\n" + offsetPoints.toNiceString())
-
-        val area = offsetPoints
-            .zipWithNextCircular { a, b -> (a.point.y + b.point.y).toLong() * (a.point.x - b.point.x).toLong() }
+        val innerArea = cornerPoints
+            .zipWithNextCircular { a, b -> (a.y + b.y).toLong() * (a.x - b.x) }
             .sum() / 2 // trapezoid formula
 
-        return abs(area)
+        val perimeter = cornerPoints
+            .zipWithNextCircular { a, b -> abs(a.x - b.x).toLong() + abs(a.y - b.y) }
+            .sum()
+
+        return abs(innerArea) + perimeter / 2 + 1 // Pick's theorem
     }
 
     fun part1(input: List<String>, print: Boolean = false): Long {
