@@ -4,185 +4,190 @@ fun main() {
     // MODEL
     data class Part(val x: Int, val m: Int, val a: Int, val s: Int)
 
-    data class Condition(
-        val cat: Char,
-        val op: Char,
-        val value: Int,
-    )
+    data class Condition(val fieldName: Char, val operation: Char, val refValue: Int)
 
-    data class Instruction(
-        val cond: Condition?,
-        val target: String
-    )
+    data class Instruction(val condition: Condition?, val target: String)
 
-    data class Workflow(val name: String, val instr: List<Instruction>)
+    data class Workflow(val name: String, val instructions: List<Instruction>)
 
     data class System(val workflows: Map<String, Workflow>, val parts: List<Part>)
 
+    // - part 2
     data class Combination(val x: IntRange, val m: IntRange, val a: IntRange, val s: IntRange)
+
+    data class CombinationSplit(val match: Combination?, val mismatch: Combination?)
+
+    data class InstructionMatch(val combination: Combination, val target: String)
 
     // PARSE
     fun String.parseCondition() = Condition(
-        cat = this[0],
-        op = this[1],
-        value = substring(2).toInt()
+        fieldName = this[0],
+        operation = this[1],
+        refValue = substring(2).toInt()
     )
 
     fun String.parseInstruction() = Instruction(
-        cond = substringBefore(':', "").takeIf { it.isNotEmpty() }?.parseCondition(),
+        condition = substringBefore(':', "").ifEmpty { null }?.parseCondition(),
         target = substringAfter(':')
     )
 
     fun String.parseWorkflow() = Workflow(
         name = substringBefore('{'),
-        instr = substringAfter('{').substringBefore('}').split(',')
+        instructions = substringAfter('{').removeSuffix("}").split(',')
             .map { it.parseInstruction() }
     )
 
-    fun String.parsePart() = drop(1).dropLast(1).split(',')
+    fun String.parsePart() = removePrefix("{").removeSuffix("}").split(',')
         .map { it.substringAfter('=').toInt() }
         .let { (x, m, a, s) -> Part(x, m, a, s) }
 
-    fun List<String>.parseSystem() = joinToString("\n").split("\n\n").let { (w, p) ->
-        val workflows = w.split('\n')
-            .filter { it.isNotBlank() }
-            .map { it.parseWorkflow() }
-        val parts = p.split('\n')
-            .filter { it.isNotBlank() }
-            .map { it.parsePart() }
-        System(workflows.associateBy { it.name }, parts)
+    fun List<String>.parseSystem() = joinToString("\n").split("\n\n").let { (workflows, parts) ->
+        System(
+            workflows = workflows.split('\n')
+                .map { it.parseWorkflow() }
+                .associateBy { it.name },
+            parts = parts.split('\n')
+                .map { it.parsePart() }
+        )
     }
 
     // SOLVE
+    val initialTarget = "in"
+
+    fun System.workflow(target: String) = workflows[target]!!
+
     fun String.isAccepted() = this == "A"
 
     fun String.isRejected() = this == "R"
 
+    fun String.isTerminal() = isAccepted() || isRejected()
+
+    // - part 1
+    fun Part.fieldValue(fieldName: Char) = when (fieldName) {
+        'x' -> x
+        'm' -> m
+        'a' -> a
+        's' -> s
+        else -> error(fieldName)
+    }
+
     fun Condition.matches(part: Part): Boolean {
-        val prop = when (cat) {
-            'x' -> part.x
-            'm' -> part.m
-            'a' -> part.a
-            's' -> part.s
-            else -> error("$cat")
-        }
-        return when (op) {
-            '<' -> prop < value
-            '>' -> prop > value
-            else -> error("$op")
+        val fieldValue = part.fieldValue(fieldName)
+        return when (operation) {
+            '<' -> fieldValue < refValue
+            '>' -> fieldValue > refValue
+            else -> error(operation)
         }
     }
 
-    data class Result(
-        val match: Combination?,
-        val mismatch: Combination?
-    )
+    fun Instruction.matches(part: Part) = condition == null || condition.matches(part)
 
-    fun Combination.withRange(cat: Char, propRange: IntRange) = when (cat) {
-        'x' -> copy(x = propRange)
-        'm' -> copy(m = propRange)
-        'a' -> copy(a = propRange)
-        's' -> copy(s = propRange)
-        else -> error("$cat")
-    }
+    fun Workflow.nextTarget(part: Part) = instructions.first { it.matches(part) }.target
 
-    fun Condition.result(c: Combination): Result {
-        val prop = when (cat) {
-            'x' -> c.x
-            'm' -> c.m
-            'a' -> c.a
-            's' -> c.s
-            else -> error("$cat")
-        }
-        val splitCombinations = listOf(prop.first..<value, value + 1..prop.last)
-            .map { c.withRange(cat, it) }
-        return when (op) {
-            '<' -> Result(
-                match = c.withRange(cat, prop.first..<value),
-                mismatch = c.withRange(cat, value..prop.last)
-            )
-            '>' -> Result(
-                match = c.withRange(cat, value + 1..prop.last),
-                mismatch = c.withRange(cat, prop.first..value)
-            )
-            else -> error("$op")
-        }
-    }
+    fun System.endTarget(part: Part) = generateSequence(initialTarget) { target -> workflow(target).nextTarget(part) }
+        .first { target -> target.isTerminal() }
 
     fun Part.rating() = x + m + a + s
 
-    fun Instruction.matches(part: Part) = cond == null || cond.matches(part)
+    fun part1(input: List<String>): Int {
+        val system = input.parseSystem()
+        val acceptedParts = system.parts.filter { part -> system.endTarget(part).isAccepted() }
 
-    fun Instruction.result(c: Combination) = cond?.result(c) ?: Result(match = c, mismatch = null)
+        return acceptedParts.sumOf { it.rating() }
+    }
 
-    fun Workflow.nextResult(part: Part) = instr.first { it.matches(part) }.target
+    // - part 2
+    fun Combination.fieldValueRange(fieldName: Char) = when (fieldName) {
+        'x' -> x
+        'm' -> m
+        'a' -> a
+        's' -> s
+        else -> error(fieldName)
+    }
 
-    fun System.nextResult(target: String, part: Part) = workflows[target]!!.nextResult(part)
+    fun Combination.withValueRange(fieldName: Char, valueRange: IntRange) = when (fieldName) {
+        'x' -> copy(x = valueRange)
+        'm' -> copy(m = valueRange)
+        'a' -> copy(a = valueRange)
+        's' -> copy(s = valueRange)
+        else -> error(fieldName)
+    }
 
-    fun System.result(part: Part) = generateSequence("in") { nextResult(it, part) }
-        .takeWhileInclusive { !(it.isAccepted() || it.isRejected()) }
-        .last()
+    fun Condition.split(combination: Combination): CombinationSplit {
+        fun partialCombination(valueRange: IntRange) = combination.withValueRange(fieldName, valueRange)
 
-    val init = 1..4000
+        val valueRange = combination.fieldValueRange(fieldName)
+        return when (operation) {
+            '<' -> CombinationSplit(
+                match = partialCombination(valueRange.first..<refValue),
+                mismatch = partialCombination(refValue..valueRange.last)
+            )
 
-    fun initial() = Combination(init, init, init, init)
+            '>' -> CombinationSplit(
+                mismatch = partialCombination(valueRange.first..refValue),
+                match = partialCombination(refValue + 1..valueRange.last)
+            )
+
+            else -> error(operation)
+        }
+    }
 
     fun Combination.isValid() = listOf(x, m, a, s).none { it.isEmpty() }
 
-    fun Result.validate() = Result(
-        match = match?.takeIf { it.isValid() },
-        mismatch = mismatch?.takeIf { it.isValid() }
-    )
+    fun Combination.validate() = takeIf { isValid() }
 
-    data class Match(val c: Combination, val target: String)
+    fun CombinationSplit.validate() = CombinationSplit(match = match?.validate(), mismatch = mismatch?.validate())
 
-    fun Workflow.nextResults(c: Combination): List<Match> {
-        val matches = mutableListOf<Match>()
-        var mismatches = listOf(c)
-        for (i in instr) {
-            val results = mismatches.map { m -> i.result(m).validate() }
-            matches += results.mapNotNull { it.match?.let { m -> Match(m, i.target) } }
-            mismatches = results.mapNotNull { it.mismatch }
+    fun Instruction.split(combination: Combination) = condition?.split(combination)
+        ?: CombinationSplit(match = combination, mismatch = null)
+
+    fun Workflow.nextMatches(combination: Combination): List<InstructionMatch> {
+        var mismatchCombinations = listOf(combination)
+        val matches = mutableListOf<InstructionMatch>()
+
+        for (instruction in instructions) {
+            val combinationSplits = mismatchCombinations
+                .map { nextCombination -> instruction.split(nextCombination).validate() }
+            mismatchCombinations = combinationSplits.mapNotNull { it.mismatch }
+            matches += combinationSplits.mapNotNull { it.match }
+                .map { nextCombination -> InstructionMatch(nextCombination, instruction.target) }
         }
+
+        check(mismatchCombinations.isEmpty())
         return matches
     }
 
-    fun System.nextResults(target: String, c: Combination) = workflows[target]!!.nextResults(c)
-
-    fun System.result(c: Combination): List<Match> {
-        val seed = listOf(Match(c, "in"))
-        return generateSequence(seed) { matches ->
-//            println(matches)
-            matches
-            .filter { m -> !m.target.isRejected() }
-            .flatMap { m -> if (m.target.isAccepted()) listOf(m) else nextResults(m.target, m.c) }
-        }
-            .takeWhileInclusive { matches -> !matches.all { it.target.isAccepted() } }
-            .last()
+    fun InstructionMatch.nextMatches(system: System) = when {
+        target.isTerminal() -> listOf(this)
+        else -> system.workflow(target).nextMatches(combination)
     }
 
-    fun Combination.combinationCount() = x.count().toLong() * m.count() * a.count() * s.count()
+    fun List<InstructionMatch>.nextMatches(system: System) = flatMap { match -> match.nextMatches(system) }
 
-    fun part1(input: List<String>): Long {
-        val system = input.parseSystem()
-        val acceptedParts = system.parts
-            .filter { part -> system.result(part).isAccepted() }
+    fun List<InstructionMatch>.allTerminal() = all { match -> match.target.isTerminal() }
 
-        return acceptedParts.sumOf { it.rating().toLong() }
-    }
+    fun initialMatch() = (1..4000)
+        .let { fullRange -> Combination(fullRange, fullRange, fullRange, fullRange) }
+        .let { initialCombination -> InstructionMatch(initialCombination, initialTarget) }
+
+    fun System.endMatches() = generateSequence(listOf(initialMatch())) { matches -> matches.nextMatches(this) }
+        .first { matches -> matches.allTerminal() }
+
+    fun IntRange.size() = last - first + 1
+
+    fun Combination.count() = x.size().toLong() * m.size() * a.size() * s.size()
 
     fun part2(input: List<String>): Long {
         val system = input.parseSystem()
-        val initial = initial()
 
-        val acceptedMatches = system.result(initial)
-        acceptedMatches.forEach { println(it) }
-        return acceptedMatches.sumOf { it.c.combinationCount() }
+        val acceptedCombinations = system.endMatches()
+            .mapNotNull { if (it.target.isAccepted()) it.combination else null }
+        return acceptedCombinations.sumOf { it.count() }
     }
 
     // TESTS
     val test1 = part1(readInput("$day/test"))
-    19114L.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
+    19114.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
 
     val test2 = part2(readInput("$day/test"))
     167409079868000L.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
@@ -190,7 +195,7 @@ fun main() {
     // RESULTS
     val input = readInput("$day/input")
     val part1 = part1(input)
-    330820L.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    330820.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
     val part2 = part2(input)
     println("Part 2: $part2")
 }
