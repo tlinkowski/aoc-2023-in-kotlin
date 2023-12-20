@@ -2,7 +2,6 @@ import java.math.BigInteger
 import java.security.MessageDigest
 import kotlin.io.path.Path
 import kotlin.io.path.readLines
-import kotlin.math.min
 
 /**
  * Reads lines from the given input txt file.
@@ -93,4 +92,28 @@ fun GridRange.toNiceString(mapper: (Point) -> Char) = yRange.joinToString("\n") 
 
 fun <T, R> List<T>.zipWithNextCircular(transform: (a: T, b: T) -> R): List<R> = indices.map { i ->
     transform(this[i], this[(i + 1) % size])
+}
+
+fun <K, V> MutableMap<K, MutableList<V>>.at(key: K) = computeIfAbsent(key) { mutableListOf() }
+
+class GraphInfo<T>(root: T, val next: (T) -> List<T>) {
+    val cyclicItems: Set<T>
+    val allItems: Set<T>
+
+    fun hasCycles() = cyclicItems.isNotEmpty()
+
+    init {
+        val cyclic = mutableSetOf<T>()
+        val all = mutableSetOf<T>()
+
+        var items = listOf(root)
+        while (items.isNotEmpty()) { // BFS
+            items = items
+                .filter { item -> all.add(item).also { if (!it) cyclic += item } }
+                .flatMap(next)
+        }
+
+        cyclicItems = cyclic
+        allItems = all
+    }
 }
