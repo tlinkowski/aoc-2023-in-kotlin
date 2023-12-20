@@ -25,8 +25,7 @@ fun LongRange.offsetBy(offset: Long) = LongRange(
 
 operator fun LongRange.contains(other: LongRange) = first <= other.first && other.last <= last
 
-fun gcd(a: Long, b: Long) = (1..min(a, b)).reversed()
-    .first { a % it == 0L && b % it == 0L }
+fun gcd(a: Long, b: Long): Long = if (b == 0L) a else gcd(b, a % b)
 
 fun lcm(a: Long, b: Long) = a / gcd(a, b) * b
 
