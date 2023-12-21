@@ -173,8 +173,6 @@ fun main() {
     fun System.endMatches() = generateSequence(listOf(initialMatch())) { matches -> matches.nextMatches(this) }
         .first { matches -> matches.allTerminal() }
 
-    fun IntRange.size() = last - first + 1
-
     fun Combination.count() = x.size().toLong() * m.size() * a.size() * s.size()
 
     fun part2(input: List<String>): Long {

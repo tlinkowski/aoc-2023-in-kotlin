@@ -117,3 +117,5 @@ class GraphInfo<T>(root: T, val next: (T) -> List<T>) {
         allItems = all
     }
 }
+
+fun IntRange.size() = last - first + 1
