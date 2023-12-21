@@ -2,10 +2,11 @@ fun main() {
     val day = "Day21"
 
     // MODEL
-    // remaining 64 steps
-// He gives you an up-to-date map (your puzzle input) of his
-// starting position (S), garden plots (.), and rocks (#)
     data class Garden(val gridRange: GridRange, val start: Point, val rocks: Set<Point>)
+
+    data class Scope(val base: GridRange, val times: Int = 0) {
+        val spanning = base.expand(times)
+    }
 
     // PARSE
     fun List<String>.parseGarden(): Garden {
@@ -15,117 +16,129 @@ fun main() {
         return Garden(toGridRange(), start, rocks)
     }
 
-    fun GridRange.adapted(p: Point) = Point(
-        (p.x % xRange.size() + xRange.size()) % xRange.size(),
-        (p.y % yRange.size() + yRange.size()) % yRange.size()
-    )
-
-    fun GridRange.expanded(times: Int) = GridRange(
-        xRange = xRange.first - times * xRange.size()..xRange.last + times * xRange.size(),
-        yRange = yRange.first - times * yRange.size()..yRange.last + times * yRange.size(),
-    )
-
     // SOLVE
-    fun GridRange.move(xTimes: Int, yTimes: Int) = GridRange(
-        xRange = (xRange.size() * xTimes).let { xRange.first + it..xRange.last + it },
-        yRange = (yRange.size() * yTimes).let { yRange.first + it..yRange.last + it }
-    )
-
-    data class Uni(
-        val base: GridRange,
-        val times: Int = 0,
-        val spanning: GridRange = base,
-        val all: Set<GridRange> = setOf(base)
-    ) {
-        fun expand(): Uni {
-            val newTimes = times + 1
-            return Uni(
-                base = base,
-                times = newTimes,
-                spanning = base.expanded(newTimes),
-                all = (-newTimes..newTimes).flatMap { xTimes ->
-                    (-newTimes..newTimes).map { yTimes -> base.move(xTimes, yTimes) }
-                }.toSet()
-            )
+    fun Garden.toNiceString(reachablePoints: Set<Point>) = gridRange.toNiceString { point ->
+        when (point) {
+            in reachablePoints -> 'O'
+            in rocks -> '#'
+            else -> '.'
         }
     }
 
-    fun Garden.reachablePlots(steps: Int): Int {
-        val stepCycles = mutableListOf<Int>()
+    fun Garden.nextPointsDirect(reachablePoints: Set<Point>) = reachablePoints.flatMap { point ->
+        Dir.entries
+            .map { dir -> point.move(dir) }
+            .filter { it !in rocks }
+    }.toSet()
 
+    fun Garden.nextPointsNormalized(reachablePoints: Set<Point>) = reachablePoints.flatMap { point ->
+        Dir.entries
+            .map { dir -> point.move(dir) }
+            .filter { gridRange.normalize(it) !in rocks }
+    }.toSet()
+
+    fun Scope.expand() = copy(times = times + 1)
+
+    operator fun Scope.contains(points: Collection<Point>) = points.all { it in spanning }
+
+    fun Garden.reachablePlotsDirect(stepCount: Int, print: Boolean): Int {
         var reachablePoints = setOf(start)
-        var uni = Uni(gridRange)
-        for (step in 1..2000) {
+        for (step in 1..stepCount) {
+            reachablePoints = nextPointsDirect(reachablePoints)
 
-            val nextReachablePoints = reachablePoints
-                .flatMap { p ->
-                    Dir.entries
-                        .map { d -> p.move(d) }
-                        .filter { pp -> gridRange.adapted(pp) !in rocks }
-                }
-                .toSet()
-
-            if (nextReachablePoints.any { it !in uni.spanning }) {
-                val prevStep = step - 1
-                stepCycles += prevStep
-                val stepCycle = stepCycles.last() - stepCycles.getOrElse(stepCycles.size - 2) { 0 }
-                val uniCountsDescription = uni.all.map { gr -> reachablePoints.count { it in gr } }
-                    .filter { it > 0 }
-                    .groupBy { it }
-                    .entries
-                    .sortedBy { it.key }
-                    .joinToString(" + ") { "${it.key}*${it.value.size}" }
-                println("x${stepCycles.size - 1}------ step $prevStep (cycle: $stepCycle) -> grids: ${uni.all.size}, ${reachablePoints.size} = $uniCountsDescription")
-
-                uni = uni.expand()
+            if (print && step <= 3) {
+                println("\nStep $step")
+                println(toNiceString(reachablePoints))
             }
-
-            reachablePoints = nextReachablePoints
-
-//            println("\nStep $step")
-//            println(gridRange.toNiceString {
-//                when (gridRange.adapted(it)) {
-//                    in reachablePoints -> 'O'
-//                    in rocks -> '#'
-//                    else -> '.'
-//                }
-//            })
         }
 
         return reachablePoints.size
     }
 
-    fun part1(input: List<String>, steps: Int): Int {
-        val garden = input.parseGarden()
+    fun Garden.reachablePlotsExtrapolated(stepCount: Int, print: Boolean): Long {
+        if (print) println("Looking for step $stepCount")
 
-        return garden.reachablePlots(steps)
+        val pointCountsPerStep = mutableListOf(1)
+        val stepsOnScopeBorder = mutableListOf<Int>()
+
+        var reachablePoints = setOf(start)
+        var scope = Scope(gridRange)
+        var step = 0
+        val minStepForExtrapolation = 50
+
+        fun findExtrapolationSteps(cycle: Cycle) = cycle.progression(stepCount).asSequence()
+            .dropWhile { it < minStepForExtrapolation }.take(3).toList()
+
+        var cycle: Cycle? = null
+        var extrapolationSteps = listOf<Int>()
+
+        while (cycle == null || extrapolationSteps.last() > step) {
+            step++
+            reachablePoints = nextPointsNormalized(reachablePoints)
+            pointCountsPerStep += reachablePoints.size
+
+            if (step == stepCount) {
+                return reachablePoints.size.toLong()
+                    .also { if (print) println("- direct return: $it") }
+            }
+
+            if (reachablePoints !in scope) {
+                stepsOnScopeBorder += step - 1 // border crossed at `step` => border edge reached at `step-1`
+                if (print && step > 100) println(" - reached border at step ${step - 1}")
+
+                if (step >= minStepForExtrapolation && cycle == null) {
+                    cycle = stepsOnScopeBorder.findCycle()
+                    if (cycle != null) {
+                        if (print) println("- found $cycle")
+                        extrapolationSteps = findExtrapolationSteps(cycle)
+                    }
+                }
+
+                scope = scope.expand()
+            }
+        }
+
+        val extrapolationPoints = extrapolationSteps.map { s -> Point(x = s, y = pointCountsPerStep[s]) }
+        val reachablePlotCountFunction = lagrange(extrapolationPoints)
+        return reachablePlotCountFunction(stepCount)
+            .also { if (print) println("- extrapolated return: $it (used $extrapolationPoints)") }
     }
 
-    fun part2(input: List<String>, steps: Int): Long {
+    fun part1(input: List<String>, steps: Int, print: Boolean = false): Int {
         val garden = input.parseGarden()
 
-        return garden.reachablePlots(steps).toLong()
+        return garden.reachablePlotsDirect(steps, print)
+    }
+
+    fun part2(input: List<String>, steps: Int, print: Boolean = false): Long {
+        val garden = input.parseGarden()
+
+        return garden.reachablePlotsExtrapolated(steps, print)
     }
 
     // TESTS
-//    val testInput = readInput("$day/test")
-//    val test1 = part1(testInput, steps = 6)
-//    16.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
-//
-//    val test2 = part2(testInput, steps = 1000)
-//    50L.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
-//
-//    val test2a = part2(testInput, steps = 50)
-//    1594L.let { check(test2a == it) { "Test 2a: is $test2a, should be $it" } }
-//
-//    val test2b = part2(testInput, steps = 100)
-//    6536L.let { check(test2a == it) { "Test 2b: is $test2b, should be $it" } }
+    val testInput = readInput("$day/test")
+    val test1 = part1(testInput, steps = 6, print = true)
+    16.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
+
+    for ((steps, result) in mapOf(
+        6 to 16L,
+        10 to 50L,
+        50 to 1594L,
+        100 to 6536L,
+        500 to 167004L,
+        1000 to 668697L,
+        5000 to 16733044L
+    )) {
+        val test2 = part2(testInput, steps = steps, print = true)
+        check(test2 == result) { "Test 2 ($steps steps): is $test2, should be $result" }
+    }
 
     // RESULTS
     val input = readInput("$day/input")
 
-    //    val part1 = part1(input, 64)
-//    3617.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
-    val part2 = part2(input, 26501365)
+    val part1 = part1(input, steps = 64)
+    3617.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
+    val part2 = part2(input, steps = 26501365, print = true)
     println("Part 2: $part2")
 }
