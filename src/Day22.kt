@@ -1,272 +1,166 @@
-enum class Axis { X, Y, Z }
+import java.util.*
+import kotlin.math.max
+import kotlin.math.min
 
 fun main() {
     val day = "Day22"
 
-    // 1,0,1~1,2,1   <- A
-    //0,0,2~2,0,2   <- B
-    //0,2,3~2,2,3   <- C
-    //0,0,4~0,2,4   <- D
-    //2,0,5~2,2,5   <- E
-    //0,1,6~2,1,6   <- F
-    //1,1,8~1,1,9   <- G
-
-    // x
-    //012
-    //.G. 9
-    //.G. 8
-    //... 7
-    //FFF 6
-    //..E 5 z
-    //D.. 4
-    //CCC 3
-    //BBB 2
-    //.A. 1
-    //--- 0
-
-    // y
-    //012
-    //.G. 9
-    //.G. 8
-    //... 7
-    //.F. 6
-    //EEE 5 z
-    //DDD 4
-    //..C 3
-    //B.. 2
-    //AAA 1
-    //--- 0
-
-    // then:
-    // x
-    //012
-    //.G. 6
-    //.G. 5
-    //FFF 4
-    //D.E 3 z
-    //??? 2
-    //.A. 1
-    //--- 0
-
-    // y
-    //012
-    //.G. 6
-    //.G. 5
-    //.F. 4
-    //??? 3 z
-    //B.C 2
-    //AAA 1
-    //--- 0
-
-    // which bricks are safe to disintegrate. A brick can be safely disintegrated if, after removing it, no other
-    // bricks would fall further directly downward.
-
-    //Brick A cannot be disintegrated safely; if it were disintegrated, bricks B and C would both fall.
-    //Brick B can be disintegrated; the bricks above it (D and E) would still be supported by brick C.
-    //Brick C can be disintegrated; the bricks above it (D and E) would still be supported by brick B.
-    //Brick D can be disintegrated; the brick above it (F) would still be supported by brick E.
-    //Brick E can be disintegrated; the brick above it (F) would still be supported by brick D.
-    //Brick F cannot be disintegrated; the brick above it (G) would fall.
-    //Brick G can be disintegrated; it does not support any other bricks.
-
     // MODEL
-    data class Point3(val x: Int, val y: Int, val z: Int) {
+    data class Point3d(val x: Int, val y: Int, val z: Int) {
         init {
-            check(z >= 1)
-        }
-
-        fun v(axis: Axis) = when (axis) {
-            Axis.X -> x
-            Axis.Y -> y
-            Axis.Z -> z
+            check(z >= 1) { this }
         }
 
         override fun toString() = "$x,$y,$z"
     }
 
-    fun toRange(a: Int, b: Int) = (a..b).takeIf { !it.isEmpty() } ?: b..a
+    data class Brick(val id: Int, val a: Point3d, val b: Point3d) {
+        private val xRange = range { it.x }
+        private val yRange = range { it.y }
+        private val zRange = range { it.z }
 
-    data class Brick(val id: Int, val a: Point3, val b: Point3) {
-        val xRange = toRange(a.x, b.x)
-        val yRange = toRange(a.y, b.y)
-        val zRange = toRange(a.z, b.z)
+        val xyPoints = xRange.flatMap { x -> yRange.map { y -> Point(x, y) } }
 
-        fun range(axis: Axis) = when (axis) {
-            Axis.X -> xRange
-            Axis.Y -> yRange
-            Axis.Z -> zRange
-        }
+        val minZ
+            get() = zRange.first
+        val maxZ
+            get() = zRange.last
 
-        val axis = Axis.entries.firstOrNull { range(it).size() > 1 }
-        val isSingle = axis == null
+        private fun range(f: (Point3d) -> Int) = min(f(a), f(b))..max(f(a), f(b))
 
-        override fun toString() = "$id: $a~$b"
+        override fun toString() = "[$id] $a~$b"
     }
 
-    data class Snapshot(val bricks: List<Brick>)
+    data class Snapshot(val bricks: Set<Brick>)
+
+    data class BrickFall(val oldBrick: Brick, val fallAmount: Int)
 
     // PARSE
-    fun String.parsePoint3() = split(',')
+    fun String.parsePoint3d() = split(',')
         .map { it.toInt() }
-        .let { (x, y, z) -> Point3(x, y, z) }
+        .let { (x, y, z) -> Point3d(x, y, z) }
 
     fun String.parseBrick(id: Int) = split('~').let { (a, b) ->
-        Brick(id, a.parsePoint3(), b.parsePoint3())
+        Brick(id, a.parsePoint3d(), b.parsePoint3d())
     }
 
-    fun List<String>.parseSnapshot() = Snapshot(mapIndexed { id, line -> line.parseBrick(id) })
+    fun List<String>.parseSnapshot() = Snapshot(mapIndexed { id, line -> line.parseBrick(id) }.toSet())
 
     // SOLVE
-    fun Point3.point2() = Point(x, y)
-
-    operator fun Brick.contains(p: Point3) =
-        p.x in xRange && p.y in yRange && p.z in zRange
-
-    fun Brick.points3() = when (axis) {
-        Axis.X -> xRange.map { x -> a.copy(x = x) }
-        Axis.Y -> yRange.map { y -> a.copy(y = y) }
-        Axis.Z -> zRange.map { z -> a.copy(z = z) }
-        else -> {
-            check(a == b)
-            listOf(a)
-        }
-    }
-
-    fun Brick.points2() = points3().map { it.point2() }.toSet()
-
-    fun Brick.fallBy(dz: Int) = copy(
-        a = a.copy(z = a.z - dz),
-        b = b.copy(z = b.z - dz)
+    fun Brick.fallBy(fallAmount: Int) = copy(
+        a = a.copy(z = a.z - fallAmount),
+        b = b.copy(z = b.z - fallAmount)
     )
 
-    class BrickFaller(s: Snapshot) {
-        var lastZ = 1
-        val bricks = s.bricks
-            .groupBy { it.zRange.first }
-            .mapValues  { (_, v) -> v.toMutableList() } //
-            .toSortedMap()
+    fun BrickFall.newBrick() = oldBrick.fallBy(fallAmount)
 
-        val byPoint2 = s.bricks
-            .flatMap { b -> b.points2().map { it to b } }
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, v) -> v.sortedBy { it.zRange.first }.toMutableList() } //
+    class BrickTetris(snapshot: Snapshot) {
+
+        private val bricksByXY: MutableMap<Point, SortedSet<Brick>> = snapshot.bricks
+            .flatMap { brick -> brick.xyPoints.map { xy -> xy to brick } }
+            .groupBy({ (xy, _) -> xy }, { (_, brick) -> brick })
+            .mapValues { (_, bricks) -> bricks.toSortedSet(compareBy { it.minZ }) }
             .toMutableMap()
 
-        fun remove(b: Brick) {
-            bricks.at(b.zRange.first) -= b
-            b.points2().forEach { p2 -> byPoint2.at(p2) -= b }
+        private val bricksByMinZ: SortedMap<Int, MutableList<Brick>> = snapshot.bricks
+            .groupBy { it.minZ }
+            .mapValues { (_, bricks) -> bricks.toMutableList() }
+            .toSortedMap()
+
+        var lastCheckedMinZ = 1
+
+        fun bricks() = bricksByMinZ.values.asSequence().flatten()
+
+        private fun bricksAt(xy: Point) = bricksByXY[xy]!!
+
+        private fun bricksAt(minZ: Int) = bricksByMinZ.at(minZ)
+
+        fun remove(brick: Brick) {
+            brick.xyPoints.forEach { xy -> bricksAt(xy) -= brick }
+            bricksAt(brick.minZ) -= brick
         }
 
-        fun add(b: Brick) {
-            bricks.at(b.zRange.first) += b
-            b.points2().forEach { p2 ->
-                val br = byPoint2.at(p2)
-                val ip = br.binarySearchBy(b.zRange.first) { it.zRange.first }
-//                println("Before insert: $br")
-//                br.forEach { bb -> println("$bb: ${bb.zRange}")}
-//                println(ip)
-                check(ip < 0)
-                br.add(-ip - 1, b)
-//                println("After insert: $br")
+        private fun add(brick: Brick) {
+            brick.xyPoints.forEach { xy -> bricksAt(xy) += brick }
+            bricksAt(brick.minZ) += brick
+        }
+
+        fun makeAllBricksFall(print: Boolean = false) {
+            var counter = 0
+            while (tryMakeNextBrickFall()) {
+                counter++
             }
+            if (print) println("Made $counter bricks fall")
         }
 
-        fun fallDz(b: Brick): Int? {
-//            byPoint2.forEach {
-//                it.value.zipWithNext().forEach { (a, c) -> check(a.zRange.last < c.zRange.first) { it } }
-//            }
+        private fun tryMakeNextBrickFall(): Boolean {
+            val brickFall = findNextBrickToFall() ?: return false
 
-            val freeZ = b.points2().maxOf { p2 ->
-                val bb = byPoint2.at(p2)
-                check(b in bb)
-                bb
-                    .takeWhile { it != b }
-                    .lastOrNull()
-                    ?.zRange?.last?.let { it + 1 } ?: 1
-            }
-//            println("$b -> freeZ: $freeZ")
-            return (b.zRange.first - freeZ).takeIf { it > 0 }
-        }
+            remove(brickFall.oldBrick)
+            add(brickFall.newBrick())
 
-        fun fallNextBrick(): Boolean {
-            val result = bricks
-                .tailMap(lastZ)
-                .values.asSequence()
-                .flatten()
-                .firstNotNullOfOrNull { b -> fallDz(b)?.let { b to it } }
-                ?: return false
-
-            val (oldBrick, dz) = result
-            lastZ = oldBrick.zRange.first
-            remove(oldBrick)
-            val newBrick = oldBrick.fallBy(dz)
-//            println("Falling $oldBrick by $dz as $newBrick")
-            add(newBrick)
+            lastCheckedMinZ = brickFall.oldBrick.minZ
             return true
         }
-    }
 
-    fun Snapshot.makeFall(): Snapshot {
-        val faller = BrickFaller(this)
-        while (faller.fallNextBrick()) {
+        private fun findNextBrickToFall(): BrickFall? = bricksByMinZ
+            .tailMap(lastCheckedMinZ) // do not check below last checked minZ
+            .values
+            .asSequence()
+            .flatten()
+            .firstNotNullOfOrNull { brick -> findFallAmount(brick)?.let { fall -> BrickFall(brick, fall) } }
+
+        private fun findFallAmount(brick: Brick): Int? {
+            val zAfterFall = brick.xyPoints.maxOf { xy -> minZAfterFallAt(brick, xy) }
+            return (brick.minZ - zAfterFall).takeIf { it > 0 }
         }
-//        faller.newBricks.forEach { b -> println(b) }
-        return Snapshot(faller.bricks.values.flatten())
-    }
 
-    fun Snapshot.disintegratableCounts(): Map<Brick, Int> {
-        val origSet = bricks.toSet()
-        return bricks.associateWith { b ->
-            val faller = BrickFaller(this)
-            faller.remove(b)
-            while (faller.fallNextBrick()) {
+        private fun minZAfterFallAt(brick: Brick, xy: Point): Int {
+            val bricksBelow = bricksAt(xy).headSet(brick)
+            if (bricksBelow.isEmpty()) {
+                return 1
             }
-            val result = faller.bricks.values.asSequence().flatten().count { it !in origSet }
-            println("$b: $result")
-            result
+            return bricksBelow.last().maxZ + 1
         }
     }
 
-    fun Snapshot.disintegratable(): List<Brick> {
-        return bricks.filter { b ->
-//            println("Checking if $b can be disintegrated")
-            val faller = BrickFaller(this)
-            faller.remove(b)
-            !faller.fallNextBrick()
-        }
+    fun Snapshot.makeBricksFall(): Snapshot {
+        val tetris = BrickTetris(this)
+        tetris.makeAllBricksFall(print = true)
+        return Snapshot(tetris.bricks().toSet())
     }
 
-    fun part1(input: List<String>): Int {
-        val snapshot = input.parseSnapshot()
-        println("Falling in progress...")
-        val fallenSnapshot = snapshot.makeFall()
-        println("Disintegrating in progress...")
-        val extractable = fallenSnapshot.disintegratable()
-        println(extractable)
-        return extractable.size
+    // returns number of bricks that would fall if given brick were removed
+    fun Snapshot.countAffectedBricksAfterRemovalOf(brick: Brick): Int {
+        val tetris = BrickTetris(this)
+        tetris.remove(brick)
+        tetris.makeAllBricksFall()
+        return tetris.bricks().count { it !in bricks }
     }
 
-    fun part2(input: List<String>): Int {
-        val snapshot = input.parseSnapshot()
-        println("Falling in progress...")
-        val fallenSnapshot = snapshot.makeFall()
-        println("Disintegrating in progress...")
-        val counts = fallenSnapshot.disintegratableCounts()
-        println(counts)
-        return counts.values.sum()
+    fun Snapshot.findBrickRemovalCounts(): Map<Brick, Int> = bricks.associateWith { brick ->
+        countAffectedBricksAfterRemovalOf(brick)
+    }
+
+    fun parts(input: List<String>): List<Int> {
+        val brickRemovalCounts = input
+            .parseSnapshot()
+            .makeBricksFall()
+            .findBrickRemovalCounts()
+
+        val part1 = brickRemovalCounts.values.count { it == 0 }
+        val part2 = brickRemovalCounts.values.sum()
+        return listOf(part1, part2)
     }
 
     // TESTS
-    val test1 = part1(readInput("$day/test"))
+    val (test1, test2) = parts(readInput("$day/test"))
     5.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
-
-    val test2 = part2(readInput("$day/test"))
     7.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
 
     // RESULTS
     val input = readInput("$day/input")
-    val part1 = part1(input)
+    val (part1, part2) = parts(input)
     398.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
-    val part2 = part2(input)
     println("Part 2: $part2")
 }
