@@ -96,6 +96,8 @@ fun <T, R> List<T>.zipWithNextCircular(transform: (a: T, b: T) -> R): List<R> = 
 
 fun <K, V> MutableMap<K, MutableList<V>>.at(key: K) = computeIfAbsent(key) { mutableListOf() }
 
+fun <K, V> MutableMap<K, MutableSet<V>>.at(key: K) = computeIfAbsent(key) { mutableSetOf() }
+
 class GraphInfo<T>(root: T, val next: (T) -> List<T>) {
     val cyclicItems: Set<T>
     val allItems: Set<T>
