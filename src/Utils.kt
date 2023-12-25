@@ -2,7 +2,6 @@ import java.math.BigInteger
 import java.security.MessageDigest
 import kotlin.io.path.Path
 import kotlin.io.path.readLines
-import kotlin.math.round
 import kotlin.math.roundToLong
 
 /**
@@ -116,8 +115,9 @@ fun <K, V> MutableMap<K, MutableList<V>>.at(key: K) = computeIfAbsent(key) { mut
 
 fun <K, V> MutableMap<K, MutableSet<V>>.at(key: K) = computeIfAbsent(key) { mutableSetOf() }
 
-class GraphInfo<T>(root: T, val next: (T) -> List<T>) {
+class GraphInfo<T>(root: T, val next: (T) -> Collection<T>) {
     val cyclicItems: Set<T>
+    var layeredCounts: List<Int>
     val allItems: Set<T>
 
     fun hasCycles() = cyclicItems.isNotEmpty()
@@ -125,15 +125,18 @@ class GraphInfo<T>(root: T, val next: (T) -> List<T>) {
     init {
         val cyclic = mutableSetOf<T>()
         val all = mutableSetOf<T>()
+        val layeredC = mutableListOf<Int>()
 
         var items = listOf(root)
         while (items.isNotEmpty()) { // BFS
+            layeredC += items.size
             items = items
                 .filter { item -> all.add(item).also { if (!it) cyclic += item } }
                 .flatMap(next)
         }
 
         cyclicItems = cyclic
+        layeredCounts = layeredC
         allItems = all
     }
 }
