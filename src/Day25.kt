@@ -1,37 +1,36 @@
-import java.util.*
-
 fun main() {
     val day = "Day25"
 
     // MODEL
-    data class ConnectionDesc(
+    data class Component(
         val name: String,
-        val connections: Set<String>,
+        val connectedComponents: Set<String>,
         val connectionInfo: GraphInfo<String>
     )
 
-    data class Machine(val connectionDescs: Map<String, ConnectionDesc>)
+    data class Machine(val components: Map<String, Component>)
 
     data class Connection(val a: String, val b: String) {
         init {
             check(a < b)
         }
+
+        override fun toString() = "$a/$b"
     }
 
-    data class CandidateSolution(val disconnected: Set<Connection>) {
+    data class Solution(val no: Int, val disconnected: Set<Connection>) {
         init {
             check(disconnected.size == 3)
         }
     }
 
     // PARSE
-    fun Map<String, Set<String>>.toMachine() = keys
+    fun toMachine(connectionMap: Map<String, Set<String>>) = connectionMap.keys
         .map { name ->
-            val connectionInfo = GraphInfo(name) { this[it]!! }
-            ConnectionDesc(
+            Component(
                 name = name,
-                connections = this[name]!!,
-                connectionInfo = connectionInfo
+                connectedComponents = connectionMap[name]!!,
+                connectionInfo = GraphInfo(name) { connectionMap[it]!! }
             )
         }
         .associateBy { it.name }
@@ -41,120 +40,95 @@ fun main() {
         val connectionMap = mutableMapOf<String, MutableSet<String>>()
 
         for (line in this) {
-            val (name, connections) = line.split(": ")
-            for (connected in connections.split(' ')) {
-                connectionMap.at(name) += connected
-                connectionMap.at(connected) += name
+            val (left, rights) = line.split(": ")
+            for (right in rights.split(' ')) {
+                connectionMap.at(left) += right
+                connectionMap.at(right) += left
             }
         }
 
-        return connectionMap.toMachine()
+        return toMachine(connectionMap)
     }
 
     // SOLVE
     fun connection(a: String, b: String) = if (a < b) Connection(a, b) else Connection(b, a)
 
-    fun Machine.groupSizes(): List<Int> {
-        val groups = mutableListOf<MutableSet<String>>()
-        for (c in connectionDescs.values) {
-            var foundGroup = false
-            for (g in groups) {
-                if (!Collections.disjoint(c.connectionInfo.allItems, g)) {
-                    g += c.connectionInfo.allItems
-                    foundGroup = true
-                    break
-                }
-            }
-            if (!foundGroup) {
-                groups += c.connectionInfo.allItems.toMutableSet()
-            }
-        }
-        return groups.map { it.size }
-    }
+    fun Machine.separateGroups(): Set<Set<String>> = components.values
+        .mapTo(mutableSetOf()) { it.connectionInfo.allItems }
 
-    fun Machine.disconnect(s: CandidateSolution): Machine {
+    fun Machine.disconnect(s: Solution): Machine {
         val connectionMap = mutableMapOf<String, MutableSet<String>>()
 
-        for (connection in connectionDescs.values) {
-            val name = connection.name
-            for (connected in connection.connections) {
-                if (connection(name, connected) !in s.disconnected) {
-                    connectionMap.at(name) += connected
-                    connectionMap.at(connected) += name
+        for (connection in components.values) {
+            val a = connection.name
+            for (b in connection.connectedComponents) {
+                if (connection(a, b) !in s.disconnected) {
+                    connectionMap.at(a) += b
+                    connectionMap.at(b) += a
                 }
             }
         }
 
-        return connectionMap.toMachine()
+        return toMachine(connectionMap)
     }
 
-    fun Machine.hasConnection(c: Connection) = c.a in connectionDescs[c.b]!!.connections
+    fun Machine.component(name: String) = components[name]!!
 
-    fun Machine.candidateSolutions(): Sequence<CandidateSolution> {
-        val wires = connectionDescs.values
-            .sortedBy { it.connectionInfo.layeredCounts.size }
+    fun Machine.hasConnection(connection: Connection) = connection.a in component(connection.b).connectedComponents
+
+    fun Machine.candidateSolutions(connectionLimit: Int): List<Solution> {
+        val wires: List<String> = components.values
+            .sortedBy { it.connectionInfo.layerSizes.size }
             .map { it.name }
-        val conns = wires.indices
+        val conns: List<Connection> = wires.indices
             .flatMap { i -> (i + 1..<wires.size).map { j -> listOf(i, j) } }
             .sortedBy { it.sum() }
             .map { (i, j) -> connection(wires[i], wires[j]) }
             .filter { hasConnection(it) }
-            .take(100)
+            .take(connectionLimit)
 
-        val solutionIndexes = conns.indices
+        val solutions = conns.indices
             .flatMap { i -> (i + 1..<conns.size).flatMap { j -> (j + 1..<conns.size).map { k -> listOf(i, j, k) } } }
             .sortedBy { it.sum() }
-        println("Potential solution count: ${solutionIndexes.size}")
-        return solutionIndexes.asSequence()
-            .map { (i, j, k) -> CandidateSolution(setOf(conns[i], conns[j], conns[k])) }
+            .mapIndexed { iSolution, (i, j, k) -> Solution(iSolution + 1, setOf(conns[i], conns[j], conns[k])) }
+        print("Analyzing ${solutions.size} solutions...")
+        return solutions
     }
 
-    fun Machine.solution(): List<Int> = candidateSolutions()
-        .firstNotNullOf { s -> disconnect(s).groupSizes().takeIf { it.size == 2 } }
-
-    // hfx/pzl, bvb/cmg, nvd/jqt
-
-    fun Machine.describe() {
-        println()
-        println("Machine with ${connectionDescs.size} connections")
-        connectionDescs.values.forEach { m ->
-            println("${m.name}: direct: ${m.connections.size}, layers: ${m.connectionInfo.layeredCounts}")
+    fun Machine.solve(connectionLimit: Int): Pair<Solution, Machine> = candidateSolutions(connectionLimit)
+        .firstNotNullOf { solution ->
+            disconnect(solution)
+                .takeIf { machine -> machine.separateGroups().size == 2 }
+                ?.let { machine -> solution to machine }
         }
-        println("Group sizes: ${groupSizes()}")
 
-        val shortestDepth = connectionDescs.values.minOf { it.connectionInfo.layeredCounts.size }
-        val shortestDepths = connectionDescs.values.filter { it.connectionInfo.layeredCounts.size == shortestDepth }
-        println("Shortest")
-        shortestDepths.forEach { println(it) }
-    }
-
-    fun part1(input: List<String>): Int {
+    fun part1(input: List<String>, printDetails: Boolean = false): Int {
+        print("Building machine from ${input.size} lines...")
         val machine = input.parseMachine()
-        machine.describe()
+        println("\b\b\b with ${machine.components.size} components")
+        if (printDetails) {
+            machine.components.values.forEach { c ->
+                println("- ${c.name}: direct connections: ${c.connectedComponents.size}, layers: ${c.connectionInfo.layerSizes}")
+            }
+        }
 
-//        val modified = machine.disconnect(setOf(setOf("hfx", "pzl"), setOf("bvb", "cmg"), setOf("nvd", "jqt")))
-//        modified.describe()
+        val (solution, fixedMachine) = machine.solve(connectionLimit = 20)
+        println("\b\b\b: found $solution")
 
-        val solution = machine.solution()
+        val separateGroups = fixedMachine.separateGroups()
+        println("Separate groups:")
+        separateGroups.forEach { g -> println("- ${g.size}: ${if (g.size <= 10) g else g.take(10) + "..."}") }
 
-        return solution.reduce(Int::times)
-    }
-
-    fun part2(input: List<String>): Long {
-        return 0
+        println()
+        return separateGroups.map { it.size }.reduce(Int::times)
     }
 
     // TESTS
-    val test1 = part1(readInput("$day/test"))
+    val test1 = part1(readInput("$day/test"), printDetails = true)
     54.let { check(test1 == it) { "Test 1: is $test1, should be $it" } }
-
-    val test2 = part2(readInput("$day/test"))
-    0L.let { check(test2 == it) { "Test 2: is $test2, should be $it" } }
 
     // RESULTS
     val input = readInput("$day/input")
-    val part1 = part1(input) // 775850 is wrong
-    0.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
-    val part2 = part2(input)
-    println("Part 2: $part2")
+    val part1 = part1(input)
+    543036.let { println("Part 1: $part1" + if (part1 == it) "" else " (should be $it?)") }
 }

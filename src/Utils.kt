@@ -117,27 +117,27 @@ fun <K, V> MutableMap<K, MutableSet<V>>.at(key: K) = computeIfAbsent(key) { muta
 
 class GraphInfo<T>(root: T, val next: (T) -> Collection<T>) {
     val cyclicItems: Set<T>
-    var layeredCounts: List<Int>
     val allItems: Set<T>
+    var layerSizes: List<Int>
 
     fun hasCycles() = cyclicItems.isNotEmpty()
 
     init {
         val cyclic = mutableSetOf<T>()
         val all = mutableSetOf<T>()
-        val layeredC = mutableListOf<Int>()
+        val layers = mutableListOf<Int>()
 
         var items = listOf(root)
         while (items.isNotEmpty()) { // BFS
-            layeredC += items.size
+            layers += items.size
             items = items
                 .filter { item -> all.add(item).also { if (!it) cyclic += item } }
                 .flatMap(next)
         }
 
         cyclicItems = cyclic
-        layeredCounts = layeredC
         allItems = all
+        layerSizes = layers
     }
 }
 
