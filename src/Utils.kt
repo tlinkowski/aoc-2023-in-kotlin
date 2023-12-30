@@ -16,7 +16,7 @@ fun String.md5() = BigInteger(1, MessageDigest.getInstance("MD5").digest(toByteA
     .toString(16)
     .padStart(32, '0')
 
-fun String.toLongs() = split(" ").filter { it.isNotBlank() }.map { it.trim().toLong() }
+fun String.toLongs(delimiter: String = " ") = split(delimiter).filter { it.isNotBlank() }.map { it.trim().toLong() }
 
 fun LongRange.offsetBy(offset: Long) = LongRange(
     start = start + offset,
@@ -109,6 +109,10 @@ fun GridRange.toNiceString(mapper: (Point) -> Char) = yRange.joinToString("\n") 
 
 fun <T, R> List<T>.zipWithNextCircular(transform: (a: T, b: T) -> R): List<R> = indices.map { i ->
     transform(this[i], this[(i + 1) % size])
+}
+
+fun <T> List<T>.zipWithEveryFollowing(): Sequence<Pair<T, T>> = indices.asSequence().flatMap { i ->
+    (i + 1..<size).asSequence().map { j -> this[i] to this[j] }
 }
 
 fun <K, V> MutableMap<K, MutableList<V>>.at(key: K) = computeIfAbsent(key) { mutableListOf() }
