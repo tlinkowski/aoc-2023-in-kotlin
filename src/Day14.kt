@@ -2,108 +2,102 @@ fun main() {
     val day = "Day14"
 
     // MODEL
-    data class Dish(val lines: List<String>) {
-        val xRange = lines[0].indices
-        val yRange = lines.indices
+    data class Dish(val gridRange: GridRange, val cubeRocks: Set<Point>, val roundRocks: Set<Point>)
 
-        override fun toString() = lines.joinToString("\n") + "\n"
-    }
+    data class DishBuilder(val gridRange: GridRange, val cubeRocks: Set<Point>, val roundRocks: MutableSet<Point>)
 
     // PARSE
-    fun List<String>.toDish() = Dish(this)
+    fun List<String>.toDish(): Dish = toPointMap().let { pointMap ->
+        Dish(
+            gridRange = toGridRange(),
+            cubeRocks = pointMap.filterValues { it == '#' }.keys,
+            roundRocks = pointMap.filterValues { it == 'O' }.keys
+        )
+    }
 
     // SOLVE
-    val cubeRock = '#'
-    val roundRock = 'O'
+    fun DishBuilder.tiltPoints(points: List<Point>) {
+        val barrierIndices = buildList {
+            add(-1)
+            addAll(points.indices.filter { i -> points[i] in cubeRocks })
+            add(points.size)
+        }
+        val openSpaceIndexRanges = barrierIndices.zipWithNext { left, right -> left + 1..<right }
 
-    fun List<Char>.tilt(): List<Char> {
-        fun IntRange.countRoundRocks() = count { i -> get(i) == roundRock }
-        val cubeRocks = indices.filter { i -> get(i) == cubeRock }.toSet()
-        val barriers = listOf(-1) + cubeRocks + size
-        val roundRocks = barriers
-            .zipWithNext { left, right -> left + 1..<right }
-            .flatMap { range -> range.take(range.countRoundRocks()) }
-            .toSet()
+        for (indexRange in openSpaceIndexRanges) {
+            val roundRockCount = indexRange.count { i -> roundRocks.remove(points[i]) }
+            indexRange.take(roundRockCount).forEach { i -> roundRocks += points[i] }
+        }
+    }
 
-        fun symbol(i: Int) = when (i) {
-            in cubeRocks -> cubeRock
-            in roundRocks -> roundRock
+    fun DishBuilder.tilt(pointLines: List<List<Point>>) = apply { pointLines.forEach { tiltPoints(it) } }
+
+    fun DishBuilder.tiltNorth() = tilt(gridRange.pointColumns)
+
+    fun DishBuilder.tiltSouth() = tilt(gridRange.pointColumns.map { it.asReversed() })
+
+    fun DishBuilder.tiltWest() = tilt(gridRange.pointRows)
+
+    fun DishBuilder.tiltEast() = tilt(gridRange.pointRows.map { it.asReversed() })
+
+    fun Dish.builder() = DishBuilder(gridRange, cubeRocks, roundRocks.toMutableSet())
+
+    fun DishBuilder.build() = Dish(gridRange, cubeRocks, roundRocks.toSet())
+
+    fun Dish.tiltNorth() = builder().tiltNorth().build()
+
+    fun Dish.spin() = builder().tiltNorth().tiltWest().tiltSouth().tiltEast().build()
+
+    fun Dish.computeNorthLoad() = roundRocks.sumOf { (_, y) -> gridRange.yRange.size() - y }
+
+    fun Dish.toNiceString() = gridRange.toNiceString { p ->
+        when (p) {
+            in cubeRocks -> '#'
+            in roundRocks -> 'O'
             else -> '.'
         }
-        return indices.map { i -> symbol(i) }
     }
 
-    fun List<Char>.reverseTilt() = reversed().tilt().reversed()
+    class SpinCycleFinder(
+        private var dish: Dish,
+        private val printDish: Boolean = false
+    ) {
 
-    fun Dish.mapVertically(f: (List<Char>) -> List<Char>): Dish {
-        val mappedXY = xRange.map { x -> f(lines.map { it[x] }) }
-        return yRange.map { y ->
-            xRange.map { x -> mappedXY[x][y] }.joinToString("")
-        }.let { Dish(it) }
-    }
+        fun dishAfterSpins(n: Int): Dish {
+            val start = reachCycleStart()
+            val cyclicDishes = detectCyclicDishes()
+            val cycle = Cycle(start, cyclicDishes.size)
+            println(cycle)
 
-    fun Dish.mapHorizontally(f: (List<Char>) -> List<Char>): Dish = Dish(
-        lines.map { line -> f(line.toList()).joinToString("") }
-    )
-
-    fun Dish.tiltNorth(): Dish = mapVertically { it.tilt() }
-
-    fun Dish.tiltSouth(): Dish = mapVertically { it.reverseTilt() }
-
-    fun Dish.tiltWest(): Dish = mapHorizontally { it.tilt() }
-
-    fun Dish.tiltEast(): Dish = mapHorizontally { it.reverseTilt() }
-
-    fun Dish.fullTilt() = tiltNorth().tiltWest().tiltSouth().tiltEast()
-
-    fun Dish.computeNorthLoad() = lines.mapIndexed { y, line ->
-        (lines.size - y) * line.count { it == roundRock }
-    }.sum()
-
-    class TiltCycleFinder(private var dish: Dish, private val printDish: Boolean = false) {
-        var tiltCount = 0
-
-        fun dishAfterFullTilts(n: Int): Dish {
-            reachCycle()
-            println("Cycle formed after $tiltCount full tilts ")
-
-            val cycle = detectCycle()
-            println("Cycle length is " + cycle.size)
-
-            return cycle[(n - tiltCount) % cycle.size]
+            return cyclicDishes[cycle.offset(n)]
         }
 
-        private fun reachCycle() = buildSet {
+        private fun reachCycleStart() = buildSet {
             while (add(dish)) {
-                tiltDish()
-                if (printDish && tiltCount <= 3) println("Full tilt $tiltCount:\n$dish")
+                dish = dish.spin()
+                if (printDish && size <= 3) println("\nSpin $size:\n${dish.toNiceString()}")
             }
-        }
+        }.size
 
-        private fun detectCycle() = buildList {
+        private fun detectCyclicDishes() = buildList {
             do {
                 add(dish)
-                tiltDish()
+                dish = dish.spin()
             } while (dish != first())
-        }
-
-        private fun tiltDish() {
-            dish = dish.fullTilt()
-            tiltCount++
         }
     }
 
     fun part1(input: List<String>, printDish: Boolean = false): Int {
         val dish = input.toDish()
         val tiltedDish = dish.tiltNorth()
-        if (printDish) println(tiltedDish)
+        if (printDish) println(tiltedDish.toNiceString())
         return tiltedDish.computeNorthLoad()
     }
 
     fun part2(input: List<String>, printDish: Boolean = false): Int {
         val dish = input.toDish()
-        return TiltCycleFinder(dish, printDish)
-            .dishAfterFullTilts(n = 1000000000)
+        return SpinCycleFinder(dish, printDish)
+            .dishAfterSpins(n = 1000000000)
             .computeNorthLoad()
     }
 

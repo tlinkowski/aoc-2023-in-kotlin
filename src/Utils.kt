@@ -81,13 +81,16 @@ data class Point(val x: Int, val y: Int) {
 
 data class GridRange(val xRange: IntRange, val yRange: IntRange) {
 
+    val pointRows by lazy { yRange.map { y -> pointsAtY(y = y) } }
+    val pointColumns by lazy { xRange.map { x -> pointsAtX(x = x) } }
+
     operator fun contains(p: Point) = p.x in xRange && p.y in yRange
 
-    fun pointsAtX(x: Int) = yRange.map { y -> Point(x, y) }
+    fun pointsAtX(x: Int): List<Point> = yRange.map { y -> Point(x, y) }
 
-    fun pointsAtY(y: Int) = xRange.map { x -> Point(x, y) }
+    fun pointsAtY(y: Int): List<Point> = xRange.map { x -> Point(x, y) }
 
-    fun allPoints() = xRange.flatMap { x -> pointsAtX(x) }
+    fun allPoints(): Sequence<Point> = pointRows.asSequence().flatten()
 
     fun expand(times: Int) = GridRange(xRange = xRange.expand(times), yRange = yRange.expand(times))
 
@@ -146,12 +149,13 @@ class GraphInfo<T>(root: T, val next: (T) -> Collection<T>) {
 }
 
 data class Cycle(val start: Int, val length: Int) {
-    // returns progression containing specified value
-    fun progression(value: Int = start): IntProgression {
-        check(value >= start) { "$value below $start" }
-        val offset = (value - start) % length
-        return start + offset..Int.MAX_VALUE step length
+    fun offset(n: Int): Int {
+        check(n >= start) { "$n below $start" }
+        return (n - start) % length
     }
+
+    // returns progression containing specified value
+    fun progression(n: Int): IntProgression = start + offset(n)..Int.MAX_VALUE step length
 }
 
 fun List<Int>.findCycle(): Cycle? {
